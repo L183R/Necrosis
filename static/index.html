@@ -509,11 +509,13 @@ const SC2=lv=>Math.round(200*(lv+1)*Math.pow(1.2,lv));
 
 // ══════════════════════════════════════════════════════
 // SKILL COST FORMULA
-// cost = base * 2^nivel * 50_000_000
-//        / ((xpTotal + 10000) * (xpElemento + 5000))
+// cost = base * 2^nivel / sqrt(((xpTotal + 10000) * (xpElemento + 5000)) / 50_000_000)
+// El factor de XP es un descuento normalizado: ayuda, pero no crece
+// exponencialmente hasta cancelar la curva exponencial del nivel de magia.
 // Bases: A=100, B=200, C=500, D=1000
 // ══════════════════════════════════════════════════════
 const SKILL_BASE={A:100,B:200,C:500,D:1000};
+const SKILL_XP_FACTOR_BASE=10000*5000;
 
 function xpSpentTotal(){
   const levels=save.skillLevels||{};
@@ -537,10 +539,11 @@ function xpSpentElement(element){
 
 function skillCostXP(sd,lv){
   const base=SKILL_BASE[sd.variant]||100;
-  const numerator=base*Math.pow(2,lv)*50000000;
+  const rawCost=base*Math.pow(2,lv);
   const xpTotal=xpSpentTotal();
   const xpElem=xpSpentElement(sd.element);
-  return Math.max(1,Math.round(numerator/((xpTotal+10000)*(xpElem+5000))));
+  const xpFactor=Math.sqrt(((xpTotal+10000)*(xpElem+5000))/SKILL_XP_FACTOR_BASE);
+  return Math.max(1,Math.round(rawCost/xpFactor));
 }
 
 const SKILL_DEF={
