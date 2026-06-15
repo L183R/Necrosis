@@ -481,23 +481,26 @@ function armorModSlots(stars){return stars+2;} // 1★=3, 2★=4, 3★=5
 
 // ARMOR MOD CATALOGUE (installable at Taller de Armaduras)
 const ARMOR_MOD_CAT=[
-  {id:'mod_hp_s',    name:'+10 HP',          stat:'bonusHp',  value:10,  cost:80,  icon:'❤️'},
-  {id:'mod_hp_m',    name:'+25 HP',          stat:'bonusHp',  value:25,  cost:180, icon:'❤️'},
-  {id:'mod_hp_l',    name:'+50 HP',          stat:'bonusHp',  value:50,  cost:350, icon:'❤️'},
-  {id:'mod_mp_s',    name:'+10 MP',          stat:'bonusMp',  value:10,  cost:80,  icon:'💙'},
-  {id:'mod_mp_m',    name:'+25 MP',          stat:'bonusMp',  value:25,  cost:180, icon:'💙'},
-  {id:'mod_mp_l',    name:'+50 MP',          stat:'bonusMp',  value:50,  cost:350, icon:'💙'},
-  {id:'mod_pockets', name:'+1 Bolsillo',     stat:'pockets',  value:1,   cost:250, icon:'🎒'},
-  {id:'mod_xp',      name:'+5 XP/kill',      stat:'xpBonus',  value:5,   cost:120, icon:'✨'},
-  {id:'mod_bp',      name:'+5 BP/kill',      stat:'bpBonus',  value:5,   cost:120, icon:'💰'},
-  {id:'mod_regen_hp',name:'Reg +3 HP/piso',  stat:'regenHp',  value:3,   cost:150, icon:'🩹'},
-  {id:'mod_regen_mp',name:'Reg +5 MP/piso',  stat:'regenMp',  value:5,   cost:150, icon:'💧'},
+  {id:'mod_hp_s',        name:'+10 HP',                stat:'bonusHp',       value:10, cost:100, icon:'❤️'},
+  {id:'mod_mp_s',        name:'+10 MP',                stat:'bonusMp',       value:10, cost:350, icon:'💙'},
+  {id:'mod_pockets',     name:'+1 Bolsillo',           stat:'pockets',       value:1,  cost:2500, icon:'🎒'},
+  {id:'mod_xp_pct',      name:'+10% XP/kill',          stat:'xpPctBonus',    value:10, cost:700, icon:'✨'},
+  {id:'mod_bp_pct',      name:'+10% BP/kill',          stat:'bpPctBonus',    value:10, cost:150, icon:'💰'},
+  {id:'mod_speed_pct',   name:'+5% velocidad',         stat:'speedPctBonus', value:5,  cost:250, icon:'👟'},
+  {id:'mod_damage_pct',  name:'+5% daño',              stat:'dmgPctBonus',   value:5,  cost:300, icon:'⚔️'},
+  {id:'mod_life_pct',    name:'+5% vida',              stat:'lifePctBonus',  value:5,  cost:250, icon:'🫀'},
+  {id:'mod_bp_loot_pct', name:'+50% BP de loot',       stat:'bpLootPct',     value:50, cost:150, icon:'🪙'},
+  {id:'mod_item_pct',    name:'+10% efecto consumible',stat:'itemPct',       value:10, cost:200, icon:'💊'},
 ];
 
 // Stats secundarios para armaduras drop (no de tienda)
-const SEC_GROUPS=[['xpBonus','bpBonus'],['regenHp','regenMp'],['itemHpPct','itemMpPct']];
+const SEC_GROUPS=[['xpPctBonus','bpPctBonus'],['speedPctBonus','dmgPctBonus'],['lifePctBonus','bpLootPct'],['itemPct','itemHpPct','itemMpPct']];
 const SEC_LABEL={
   xpBonus:v=>`+${v} XP/kill`,bpBonus:v=>`+${v} BP/kill`,
+  xpPctBonus:v=>`+${v}% XP/kill`,bpPctBonus:v=>`+${v}% BP/kill`,
+  speedPctBonus:v=>`+${v}% velocidad`,dmgPctBonus:v=>`+${v}% daño`,
+  lifePctBonus:v=>`+${v}% vida`,bpLootPct:v=>`+${v}% BP de loot`,
+  itemPct:v=>`+${v}% consumibles`,
   regenHp:v=>`Reg ${v} HP/oleada`,regenMp:v=>`Reg ${v} MP/oleada`,
   itemHpPct:v=>`+${v}% HP de items`,itemMpPct:v=>`+${v}% MP de items`,
 };
@@ -1187,7 +1190,7 @@ function equippedArmor(){
 }
 function armorStats(){
   const a=equippedArmor();
-  const out={pockets:2,bonusHp:0,bonusMp:0,secondary:{},xpPctBonus:0,bpPctBonus:0,speedPctBonus:0};
+  const out={pockets:2,bonusHp:0,bonusMp:0,secondary:{},xpPctBonus:0,bpPctBonus:0,speedPctBonus:0,dmgPctBonus:0,lifePctBonus:0,bpLootPct:0,itemPct:0};
   if(!a)return out;
   out.pockets=a.pockets||0;
   out.bonusHp=a.bonusHp||0;
@@ -1198,12 +1201,26 @@ function armorStats(){
     if(m.stat==='bonusHp')out.bonusHp+=m.value||0;
     else if(m.stat==='bonusMp')out.bonusMp+=m.value||0;
     else if(m.stat==='pockets')out.pockets+=m.value||0;
+    else if(m.stat==='xpPctBonus')out.xpPctBonus+=m.value||0;
+    else if(m.stat==='bpPctBonus')out.bpPctBonus+=m.value||0;
+    else if(m.stat==='speedPctBonus')out.speedPctBonus+=m.value||0;
+    else if(m.stat==='dmgPctBonus')out.dmgPctBonus+=m.value||0;
+    else if(m.stat==='lifePctBonus')out.lifePctBonus+=m.value||0;
+    else if(m.stat==='bpLootPct')out.bpLootPct+=m.value||0;
+    else if(m.stat==='itemPct')out.itemPct+=m.value||0;
     else if(m.stat==='xpBonus')out.secondary.xpBonus=(out.secondary.xpBonus||0)+(m.value||0);
     else if(m.stat==='bpBonus')out.secondary.bpBonus=(out.secondary.bpBonus||0)+(m.value||0);
     else if(m.stat==='regenHp')out.secondary.regenHp=(out.secondary.regenHp||0)+(m.value||0);
     else if(m.stat==='regenMp')out.secondary.regenMp=(out.secondary.regenMp||0)+(m.value||0);
     else out.secondary[m.stat]=(out.secondary[m.stat]||0)+(m.value||0);
   }
+  out.xpPctBonus+=out.secondary.xpPctBonus||0;
+  out.bpPctBonus+=out.secondary.bpPctBonus||0;
+  out.speedPctBonus+=out.secondary.speedPctBonus||0;
+  out.dmgPctBonus+=out.secondary.dmgPctBonus||0;
+  out.lifePctBonus+=out.secondary.lifePctBonus||0;
+  out.bpLootPct+=out.secondary.bpLootPct||0;
+  out.itemPct+=out.secondary.itemPct||0;
   out.pockets=Math.max(1,out.pockets);
   return out;
 }
@@ -2257,8 +2274,8 @@ function initGame(){
     camera:{x:0,y:0},
     player:{
       x:3*TILE,y:3*TILE,w:28,h:28,
-      hp:Math.round((save.stats.hp+as.bonusHp+(()=>{const _rl=(save.skillLevels&&save.skillLevels['resistencia'])||0;return _rl>0?SKILL_DEF.resistencia.stats(_rl).bonusHp:0;})())*(1+(save.stats.res||0)*0.02)),
-      maxHp:Math.round((save.stats.hp+as.bonusHp+(()=>{const _rl=(save.skillLevels&&save.skillLevels['resistencia'])||0;return _rl>0?SKILL_DEF.resistencia.stats(_rl).bonusHp:0;})())*(1+(save.stats.res||0)*0.02)),
+      hp:Math.round((save.stats.hp+as.bonusHp+(()=>{const _rl=(save.skillLevels&&save.skillLevels['resistencia'])||0;return _rl>0?SKILL_DEF.resistencia.stats(_rl).bonusHp:0;})())*(1+(save.stats.res||0)*0.02)*(1+(as.lifePctBonus||0)/100)),
+      maxHp:Math.round((save.stats.hp+as.bonusHp+(()=>{const _rl=(save.skillLevels&&save.skillLevels['resistencia'])||0;return _rl>0?SKILL_DEF.resistencia.stats(_rl).bonusHp:0;})())*(1+(save.stats.res||0)*0.02)*(1+(as.lifePctBonus||0)/100)),
       mp:save.stats.mp+as.bonusMp,maxMp:save.stats.mp+as.bonusMp,
       freeXP:save.freeXP,bp:save.bp,
       facing:0,invTime:0,
@@ -2770,7 +2787,7 @@ function generateChestLoot(){
   if(cat==='none') return null;
 
   if(cat==='bp'){
-    const amt=Math.round(luckMul*(5+Math.floor(Math.random()*31)+gs.floor*3));
+    const amt=Math.round(luckMul*(5+Math.floor(Math.random()*31)+gs.floor*3)*(1+(armorStats().bpLootPct||0)/100));
     return{type:'bp',icon:'\u{1F4B0}',name:'Blood Points',desc:`+${amt} BP`,data:{bp:amt}};
   }
 
@@ -2987,15 +3004,17 @@ function useConsumable(){
   const {s:item,i:idx}=cSlots[0];
   if(item.data.hp){
     const _resMul=1+(p.stats.res||0)*0.02;
-    const _hpHeal=Math.round(item.data.hp*_resMul);
+    const _itemMul=1+(armorStats().itemPct||0)/100;
+    const _hpHeal=Math.round(item.data.hp*_resMul*_itemMul);
     p.hp=Math.min(p.maxHp,p.hp+_hpHeal);
-    addLog(`${item.icon} +${_hpHeal} HP${_resMul>1?' (Res +'+Math.round((_resMul-1)*100)+'%)':''}`);
+    addLog(`${item.icon} +${_hpHeal} HP${_resMul>1?' (Res +'+Math.round((_resMul-1)*100)+'%)':''}${_itemMul>1?' (Consumible +'+Math.round((_itemMul-1)*100)+'%)':''}`);
   }
   if(item.data.mp){
     const _resMulMp=1+(p.stats.res||0)*0.02;
-    const _mpHeal=Math.round(item.data.mp*_resMulMp);
+    const _itemMul=1+(armorStats().itemPct||0)/100;
+    const _mpHeal=Math.round(item.data.mp*_resMulMp*_itemMul);
     p.mp=Math.min(p.maxMp,p.mp+_mpHeal);
-    addLog(`${item.icon} +${_mpHeal} MP${_resMulMp>1?' (Res +'+Math.round((_resMulMp-1)*100)+'%)':''}`);
+    addLog(`${item.icon} +${_mpHeal} MP${_resMulMp>1?' (Res +'+Math.round((_resMulMp-1)*100)+'%)':''}${_itemMul>1?' (Consumible +'+Math.round((_itemMul-1)*100)+'%)':''}`);
   }
   p.pockets[idx]=null;
   p.weaponSlots=pocketWeapons(p.pockets);
@@ -3235,7 +3254,8 @@ function fireSingleShot(p,w,ws,angle){
   ws.ammo--; updatePocketAmmo();
   gs.lastShotRadius=isInvisible()?0:(w.soundRadius||180); gs.lastShotTime=Date.now();
   const daBonus=p.skills.find(s=>s&&s.id==='disparo_aumentado'&&s.active&&Date.now()<s.end);
-  const dmg=Math.round(w.dmg*(0.9+Math.random()*0.2)*(1+p.stats.str/40)*(daBonus?1+daBonus.dmgBonus:1)*violenceDamageMul());
+  const _as=armorStats();
+  const dmg=Math.round(w.dmg*(0.9+Math.random()*0.2)*(1+p.stats.str/40)*(daBonus?1+daBonus.dmgBonus:1)*violenceDamageMul()*(1+(_as.dmgPctBonus||0)/100));
   if(w.spread){
     for(let i=0;i<5;i++){const a=angle+(Math.random()-0.5)*0.38;
       gs.bullets.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:Math.cos(a)*10,vy:Math.sin(a)*10,dmg:Math.round(dmg*0.45),range:w.range,traveled:0,type:'bullet',r:4,color:'#f0e68c'});}
@@ -3256,10 +3276,11 @@ function tryAttack(){
 
   if(w.type==='melee'){
     ws.lastUsed=now;
+    const _as=armorStats();
     for(const e of gs.enemies){
       const ex=e.x+e.size/2,ey=e.y+e.size/2;
       if(Math.hypot(ex-(p.x+p.w/2),ey-(p.y+p.h/2))<w.range&&Math.abs(normA(Math.atan2(ey-(p.y+p.h/2),ex-(p.x+p.w/2))-angle))<Math.PI/2.2)
-        {damageEnemy(e,Math.round(w.dmg*(0.85+Math.random()*0.3)*(1+p.stats.str*0.025)*violenceDamageMul()),true);}
+        {damageEnemy(e,Math.round(w.dmg*(0.85+Math.random()*0.3)*(1+p.stats.str*0.025)*violenceDamageMul()*(1+(_as.dmgPctBonus||0)/100)),true);}
     }
     spawnMeleeEffect(p.x+p.w/2,p.y+p.h/2,angle);
     return;
@@ -3303,7 +3324,7 @@ function useSkill(idx){
     if(!gs||gs.gameOver)return;
     const _sk=(gs.player.skills||[]).find(x=>x&&x.id===_snapSkill.id)||s;
     const _intBonus=1+(gs.player.stats.int||0)*0.02;
-    const _dmg=Math.round((_snapSkill.dmg||0)*_intBonus*violenceDamageMul()*magicDamageMul());
+    const _dmg=Math.round((_snapSkill.dmg||0)*_intBonus*violenceDamageMul()*magicDamageMul()*(1+(armorStats().dmgPctBonus||0)/100));
     const _heal=Math.round((_snapSkill.heal||0)*_intBonus);
     const _range=_snapSkill.range||80;
     const _radius=_snapSkill.radius||40;
@@ -3833,7 +3854,8 @@ function update(dt){
   if(gs.keys['KeyW']||gs.keys['ArrowUp'])dy-=1;
   if(gs.keys['KeyS']||gs.keys['ArrowDown'])dy+=1;
   if(dx!==0&&dy!==0){dx*=0.707;dy*=0.707;}
-  const spd=PLAYER_SPD*(1+(gs.player.stats.agi||0)*0.01);
+  const _asMove=armorStats();
+  const spd=PLAYER_SPD*(1+(gs.player.stats.agi||0)*0.01)*(1+(_asMove.speedPctBonus||0)/100);
   const nx=p.x+dx*spd,ny=p.y+dy*spd,m=4;
   if(!isWall(nx+m,p.y+m)&&!isWall(nx+p.w-m,p.y+m)&&!isWall(nx+m,p.y+p.h-m)&&!isWall(nx+p.w-m,p.y+p.h-m))p.x=nx;
   if(!isWall(p.x+m,ny+m)&&!isWall(p.x+p.w-m,ny+m)&&!isWall(p.x+m,ny+p.h-m)&&!isWall(p.x+p.w-m,ny+p.h-m))p.y=ny;
