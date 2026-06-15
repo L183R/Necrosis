@@ -597,9 +597,9 @@ const SKILL_DEF={
   destreza:{id:'destreza',element:'aire',variant:'D',passive:true,name:'Destreza',icon:'💨',maxLevel:99,
     desc:'PASIVA: Multiplica los BP que dan los enemigos al morir.',stats:lv=>({bpMul:1+0.25*lv})},
   // LUZ
-  rayo_sagrado:{id:'rayo_sagrado',element:'luz',variant:'A',name:'Rayo Sagrado',icon:'🌟',cast:450,maxLevel:99,
+  rayo_sagrado:{id:'rayo_sagrado',element:'luz',variant:'A',name:'Rayo Sagrado',icon:'🌟',cast:225,maxLevel:99,
     mpCost:lv=>Math.min(24,12+lv*0.25),
-    desc:'Rayo de luz que atraviesa enemigos y rebota ilimitadamente en paredes.',stats:lv=>({dmg:5+3*lv,range:200+25*lv,speed:11,bounces:Infinity})},
+    desc:'Rayo de luz que atraviesa enemigos y rebota ilimitadamente en paredes.',stats:lv=>({dmg:5+3*lv,range:400+50*lv,speed:11,bounces:Infinity})},
   destello_luz:{id:'destello_luz',element:'luz',variant:'B',name:'Destello de Luz',icon:'💫',cast:500,maxLevel:99,
     mpCost:lv=>Math.min(26,14+lv*0.25),
     desc:'Área de efecto que provoca a los enemigos afectados.',stats:lv=>({radius:160+20*lv,duration:2000+lv*400})},
@@ -3434,7 +3434,7 @@ function useSkill(idx){
 
     } else if(_snapSkill.id==='rayo_sagrado'){
       gs.bullets.push({x:_cx,y:_cy,vx:Math.cos(_snapAngle)*(_snapSkill.speed||11),vy:Math.sin(_snapAngle)*(_snapSkill.speed||11),
-        dmg:_dmg,range:_snapSkill.range||225,traveled:0,type:'lightning',r:7,color:'#fff6a0',pierce:true,bounces:_snapSkill.bounces,hitEnemies:[]});
+        dmg:_dmg,range:_snapSkill.range||225,traveled:0,type:'lightning',r:3.5,color:'#fff6a0',pierce:true,bounces:_snapSkill.bounces,hitEnemies:[]});
       addLog(`🌟 Rayo sagrado! (${_dmg} daño)`);
 
     } else if(_snapSkill.id==='destello_luz'){
