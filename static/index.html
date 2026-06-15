@@ -329,10 +329,35 @@ const DEFAULT_SAVE={
   armorMods: {},  // {armorUid: [{id,stat,value},...]}  — modifications installed by taller
   loadout: [], // pocket configuration saved between runs [{type,...}|null]
 };
+function normalizeSave(raw){
+  const base=JSON.parse(JSON.stringify(DEFAULT_SAVE));
+  const merged=Object.assign(base,raw||{});
+  merged.stats=Object.assign({},DEFAULT_SAVE.stats,(raw&&raw.stats)||{});
+  merged.skillLevels=Object.assign({},DEFAULT_SAVE.skillLevels,(raw&&raw.skillLevels)||{});
+  if(!Array.isArray(merged.unlockedSkills))merged.unlockedSkills=[...DEFAULT_SAVE.unlockedSkills];
+  if(!Array.isArray(merged.skillSlots))merged.skillSlots=[...DEFAULT_SAVE.skillSlots];
+  if(!Array.isArray(merged.ownedWeapons))merged.ownedWeapons=[...DEFAULT_SAVE.ownedWeapons];
+  if(!Array.isArray(merged.ownedArmors))merged.ownedArmors=[];
+  if(!Array.isArray(merged.stash))merged.stash=[];
+  if(!Array.isArray(merged.vehicles))merged.vehicles=[];
+  if(!Array.isArray(merged.loadout))merged.loadout=[];
+  merged.freeXP=Math.max(0,Math.round(+merged.freeXP||0));
+  const legacyXP=Math.max(0,Math.round(+merged.xp||0));
+  if(legacyXP>0){
+    // Versiones anteriores dejaban XP en la barra de nivel; ahora todo XP es libre y gastable.
+    merged.freeXP+=legacyXP;
+    merged.xp=0;
+    merged._needsPersist=true;
+  }else{
+    merged.xp=0;
+  }
+  merged.xpNext=merged.xpNext||DEFAULT_SAVE.xpNext;
+  return merged;
+}
 function loadSave(){
-  try{const r=localStorage.getItem(SAVE_KEY);if(!r)return JSON.parse(JSON.stringify(DEFAULT_SAVE));
-  return Object.assign(JSON.parse(JSON.stringify(DEFAULT_SAVE)),JSON.parse(r));}
-  catch(e){return JSON.parse(JSON.stringify(DEFAULT_SAVE));}
+  try{const r=localStorage.getItem(SAVE_KEY);if(!r)return normalizeSave();
+  return normalizeSave(JSON.parse(r));}
+  catch(e){return normalizeSave();}
 }
 function writeSave(){localStorage.setItem(SAVE_KEY,JSON.stringify(save));}
 function spendFreeXP(cost){
@@ -353,6 +378,7 @@ function resetSave(){
   addLog('Progreso borrado. Nueva partida.');
 }
 let save=loadSave();
+if(save._needsPersist){delete save._needsPersist;writeSave();}
 
 // ═══════════════════════════════════════════════════════════
 // CATALOGUES
