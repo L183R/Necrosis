@@ -571,9 +571,9 @@ const SKILL_DEF={
     desc:'Refleja parte del daño de los atacantes.',stats:lv=>({reflect:0.20+lv*0.10,duration:5000})},
   golem:{id:'golem',element:'tierra',variant:'C',name:'Gólem',icon:'🪨',cast:1500,maxLevel:99,
     mpCost:lv=>Math.min(50,32+lv*0.40),
-    desc:'Crea una roca que persigue y daña enemigos hasta terminar el piso.',stats:lv=>({dmg:10+lv*2,speed:0.7})},
+    desc:'Crea una roca que atrae enemigos hasta terminar el piso y hace daño mínimo.',stats:lv=>({dmg:1,speed:0.7})},
   resistencia:{id:'resistencia',element:'tierra',variant:'D',passive:true,name:'Resistencia',icon:'🦴',maxLevel:99,
-    desc:'PASIVA: +2 HP máximo por nivel al iniciar partida.',stats:lv=>({bonusHp:lv*5})},
+    desc:'PASIVA: +2 HP máximo por nivel al iniciar partida.',stats:lv=>({bonusHp:lv*2})},
   // AGUA
   curacion:{id:'curacion',element:'agua',variant:'A',name:'Curación',icon:'💚',cast:800,maxLevel:99,
     mpCost:lv=>Math.min(24,10+lv*0.30),
@@ -599,13 +599,13 @@ const SKILL_DEF={
   // LUZ
   rayo_sagrado:{id:'rayo_sagrado',element:'luz',variant:'A',name:'Rayo Sagrado',icon:'🌟',cast:450,maxLevel:99,
     mpCost:lv=>Math.min(24,12+lv*0.25),
-    desc:'Rayo de luz que atraviesa enemigos y rebota en paredes.',stats:lv=>({dmg:5*lv,range:200+25*lv,speed:11,bounces:4})},
+    desc:'Rayo de luz que atraviesa enemigos y rebota ilimitadamente en paredes.',stats:lv=>({dmg:5+3*lv,range:200+25*lv,speed:11,bounces:Infinity})},
   destello_luz:{id:'destello_luz',element:'luz',variant:'B',name:'Destello de Luz',icon:'💫',cast:500,maxLevel:99,
     mpCost:lv=>Math.min(26,14+lv*0.25),
     desc:'Área de efecto que provoca a los enemigos afectados.',stats:lv=>({radius:160+20*lv,duration:2000+lv*400})},
   panorama_jubilo:{id:'panorama_jubilo',element:'luz',variant:'C',name:'Panorama de Júbilo',icon:'🌅',cast:700,maxLevel:99,
     mpCost:lv=>Math.min(42,24+lv*0.40),
-    desc:'Buff temporal que aumenta el daño mágico.',stats:lv=>({magicDmgBonus:0.10*lv,duration:4500+500*lv})},
+    desc:'Buff temporal que aumenta el daño mágico un 30%.',stats:lv=>({magicDmgBonus:0.30,duration:4000+1000*lv})},
   sabiduria:{id:'sabiduria',element:'luz',variant:'D',passive:true,name:'Sabiduría',icon:'📖',maxLevel:99,
     desc:'PASIVA: aumenta la duración de los buffs.',stats:lv=>({buffDurationBonus:0.10*lv})},
 };
@@ -3414,14 +3414,14 @@ function useSkill(idx){
       const gpos=findFreePos(24,Math.floor(_cx/TILE),Math.floor(_cy/TILE));
       gs._golems.push({
         x:gpos.x,y:gpos.y,
-        dmg:Math.max(1,Math.round((_dmg||_snapSkill.dmg||8)/2)),
-        // Nerf: el gólem camina como un Caminante, pega la mitad y ahora puede morir.
+        dmg:1,
+        // El gólem prioriza atraer enemigos y solo inflige daño mínimo.
         speed:0.85,hp:200,maxHp:200,
         active:true,size:24,r:12,color:'#8B6914',
         owner:'local',createdAt:Date.now(),lastHit:0,angle:0,wobble:0
       });
       spawnExplosion(gpos.x+12,gpos.y+12,34,'#8B6914');
-      addLog('🪨 Gólem convocado: atacará enemigos y los atraerá hacia vos.');
+      addLog('🪨 Gólem convocado: atraerá enemigos hacia él.');
 
     } else if(_snapSkill.id==='resistencia'){
       addLog('Resistencia es pasiva — ya activa');
@@ -3434,7 +3434,7 @@ function useSkill(idx){
 
     } else if(_snapSkill.id==='rayo_sagrado'){
       gs.bullets.push({x:_cx,y:_cy,vx:Math.cos(_snapAngle)*(_snapSkill.speed||11),vy:Math.sin(_snapAngle)*(_snapSkill.speed||11),
-        dmg:_dmg,range:_snapSkill.range||225,traveled:0,type:'lightning',r:7,color:'#fff6a0',pierce:true,bounces:_snapSkill.bounces||4,hitEnemies:[]});
+        dmg:_dmg,range:_snapSkill.range||225,traveled:0,type:'lightning',r:7,color:'#fff6a0',pierce:true,bounces:_snapSkill.bounces,hitEnemies:[]});
       addLog(`🌟 Rayo sagrado! (${_dmg} daño)`);
 
     } else if(_snapSkill.id==='destello_luz'){
@@ -3467,7 +3467,13 @@ function useSkill(idx){
 // ═══════════════════════════════════════════════════════════
 // COMBAT
 // ═══════════════════════════════════════════════════════════
+function breakInvisibilityOnEnemyDamage(){
+  if(!gs||!gs.player||!gs.player.skills)return;
+  const invis=gs.player.skills.find(s=>s&&s.id==='invisibilidad'&&s.active&&Date.now()<s.end);
+  if(invis){invis.active=false;invis.end=0;addLog('👻 Invisibilidad rota');}
+}
 function damageEnemy(e,dmg,stun){
+  breakInvisibilityOnEnemyDamage();
   e.hp-=dmg;if(stun)e.stunTime=Date.now()+280;
   spawnDmgNumber(e.x+e.size/2,e.y,dmg,false);
   spawnBloodParticles(e.x+e.size/2,e.y+e.size/2,e.color);
@@ -3835,10 +3841,8 @@ function updateGolems(now){
       if(!isWall(g.x+3,ny+3,true)&&!isWall(g.x+g.size-3,ny+3,true)&&!isWall(g.x+3,ny+g.size-3,true)&&!isWall(g.x+g.size-3,ny+g.size-3,true)) g.y=ny;
     } else if(!g.lastHit||now-g.lastHit>1300){
       g.lastHit=now;
-      // El enemigo golpeado por el gólem se alerta y busca al invocador.
+      // El enemigo golpeado por el gólem queda atraído por el propio gólem.
       target.alerted=true;
-      target._summonerAggroUntil=now+7000;
-      target._summonerAggroSource='golem';
       target.stunTime=Math.max(target.stunTime||0,now+120);
       damageEnemy(target,g.dmg,false);
       spawnExplosion(tx,ty,14,'#8B6914');
@@ -3950,18 +3954,18 @@ function update(dt){
     for(const g of (gs._golems||[])){
       if(!g||!g.active)continue;
       const gd=Math.hypot(g.x+g.size/2-ex,g.y+g.size/2-ey);
-      if(gd<e.detect&&gd<targetGolemDist){targetGolem=g;targetGolemDist=gd;}
+      if(gd<targetGolemDist){targetGolem=g;targetGolemDist=gd;}
     }
     if(targetGolem){px=targetGolem.x+targetGolem.size/2;py=targetGolem.y+targetGolem.size/2;e.alerted=true;e._targetGolem=targetGolem;}
     else { if(e._tauntUntil&&e._tauntUntil>now)e.alerted=true; e._targetGolem=null; }
     const edx=px-ex,edy=py-ey,dist=Math.hypot(edx,edy);
     // Detection: alert if in range (including noise bonus) or already alerted and dist<400.
-    // Si un gólem lo golpeó, el enemigo busca al invocador aunque esté lejos por unos segundos.
-    const forcedSummonerAggro=e._summonerAggroUntil&&e._summonerAggroUntil>now;
+    // El gólem atrae a los enemigos hacia él y toma prioridad sobre el jugador.
     const effectiveDetect=e.detect+playerNoise;
-    if(invisible&&!forcedSummonerAggro){e.alerted=false;}
-    else if(forcedSummonerAggro||(!e.alerted&&dist<effectiveDetect)) e.alerted=true;
-    if(e.alerted&&dist>500&&!forcedSummonerAggro) e.alerted=false; // lose track
+    if(targetGolem){e.alerted=true;}
+    else if(invisible){e.alerted=false;}
+    else if(!e.alerted&&dist<effectiveDetect) e.alerted=true;
+    if(e.alerted&&dist>500&&!targetGolem) e.alerted=false; // lose track
     if(e.alerted){
       e.angle=Math.atan2(edy,edx);
       if(dist>1){const mvx=(edx/dist)*e.speed,mvy=(edy/dist)*e.speed,enx=e.x+mvx,eny=e.y+mvy;
