@@ -309,6 +309,7 @@ canvas{display:block;position:fixed;inset:0}
 const SAVE_KEY='necrosis_v32';
 const DEFAULT_SAVE={
   freeXP:0,bp:0,
+  level:1,xp:0,xpNext:100,
   stats:{hp:100,mp:50,str:10,int:10,agi:10,luck:10,res:10}, // res=resistencia, +2% HP/point
   ownedWeapons:['cuchillo','pistola'],  // pistola starts owned but needs 9mm ammo
   skillRanks:[1,1,1,1],   // kept for compat
@@ -334,6 +335,14 @@ function loadSave(){
   catch(e){return JSON.parse(JSON.stringify(DEFAULT_SAVE));}
 }
 function writeSave(){localStorage.setItem(SAVE_KEY,JSON.stringify(save));}
+function spendFreeXP(cost){
+  cost=Math.max(0,Math.round(+cost||0));
+  const xp=+save.freeXP||0;
+  if(xp<cost)return false;
+  save.freeXP=xp-cost;
+  if(gs&&gs.player)gs.player.freeXP=save.freeXP;
+  return true;
+}
 function resetSave(){
   if(!confirm('¿Borrar TODO el progreso guardado? Esta acción no se puede deshacer.'))return;
   // Remove all necrosis save keys (any version)
@@ -502,10 +511,10 @@ function xpSpentElement(element){
 
 function skillCostXP(sd,lv){
   const base=SKILL_BASE[sd.variant]||100;
-  const numerator=base*Math.pow(2,lv)*5000000000;
+  const numerator=base*Math.pow(2,lv)*50000000;
   const xpTotal=xpSpentTotal();
   const xpElem=xpSpentElement(sd.element);
-  return Math.max(1,Math.round(numerator/((xpTotal+100000)*(xpElem+50000))));
+  return Math.max(1,Math.round(numerator/((xpTotal+10000)*(xpElem+5000))));
 }
 
 const SKILL_DEF={
@@ -1068,8 +1077,7 @@ function upgradeStatXP(statKey){
   const cur=save.stats[statKey]||0;
   const cost=statUpgradeCost(cur);
   save.freeXP=+save.freeXP||0;
-  if(save.freeXP<cost){addLog(`XP insuficiente (${cost} XP necesarios)`);return;}
-  save.freeXP-=cost;
+  if(!spendFreeXP(cost)){addLog(`XP insuficiente (${cost} XP necesarios)`);return;}
   save.stats[statKey]=(cur+1);
   writeSave();renderCharScreen();
   if(gs&&gs.player){
@@ -1953,9 +1961,7 @@ function upgradeSkill(i){}  // legacy compat — not used
 function unlockSkill(skillId){
   const sd=SKILL_DEF[skillId];if(!sd)return;
   const cost=skillCostXP(sd,0);
-  const xp=(+save.freeXP||0);
-  if(xp<cost){alert(`XP insuficiente: necesitás ${cost} XP.`);return;}
-  save.freeXP=xp-cost;
+  if(!spendFreeXP(cost)){alert(`XP insuficiente: necesitás ${cost} XP.`);return;}
   if(!save.unlockedSkills)save.unlockedSkills=['bola_fuego'];
   if(!save.unlockedSkills.includes(skillId))save.unlockedSkills.push(skillId);
   if(!save.skillLevels)save.skillLevels={};
@@ -1978,9 +1984,7 @@ function upgradeSkillById(skillId,slotIdx){slotIdx=slotIdx||0;
   const lv=save.skillLevels[skillId]||0;
   if(lv>=sd.maxLevel)return;
   const cost=skillCostXP(sd,lv);
-  const xp=(+save.freeXP||0);
-  if(xp<cost){alert(`XP insuficiente: necesitás ${cost} XP.`);return;}
-  save.freeXP=xp-cost;
+  if(!spendFreeXP(cost)){alert(`XP insuficiente: necesitás ${cost} XP.`);return;}
   save.skillLevels[skillId]=lv+1;
   writeSave();renderCharScreen();
 }
