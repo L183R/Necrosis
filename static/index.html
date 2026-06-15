@@ -568,9 +568,7 @@ const SKILL_DEF={
   regeneracion:{id:'regeneracion',element:'agua',variant:'B',name:'Regeneración',icon:'✨',cast:500,maxLevel:99,
     desc:'Regenera vida durante un tiempo.',stats:lv=>({healPerSec:7+lv*1,duration:Math.round((4.5+lv*0.5)*1000)})},
   tsunami:{id:'tsunami',element:'agua',variant:'C',name:'Tsunami',icon:'🌊',cast:2000,maxLevel:99,
-    desc:'Daño bajo a TODOS los enemigos del nivel.',stats:lv=>({dmg:5+lv*3})},
-  sabiduria:{id:'sabiduria',element:'agua',variant:'D',passive:true,name:'Sabiduría',icon:'📖',maxLevel:99,
-    desc:'PASIVA: +2 MP máximo por nivel al iniciar partida.',stats:lv=>({bonusMp:lv*3})},
+    desc:'Daño doble, pero cada enemigo tiene 50% de probabilidad de ser golpeado.',stats:lv=>({dmg:10+lv*6,hitChance:0.5})},
   // AIRE
   disparo_aumentado:{id:'disparo_aumentado',element:'aire',variant:'A',name:'Disparo Aumentado',icon:'⚡',cast:400,maxLevel:99,
     desc:'Aumenta el daño de armas de fuego temporalmente.',stats:lv=>({dmgBonus:(45+lv*5)/100,duration:Math.round((4.5+lv*0.5)*1000)})},
@@ -580,14 +578,24 @@ const SKILL_DEF={
     desc:'Indetectable por enemigos + armas sin ruido.',stats:lv=>({duration:Math.round((4.5+lv*0.5)*1000)})},
   destreza:{id:'destreza',element:'aire',variant:'D',passive:true,name:'Destreza',icon:'💨',maxLevel:99,
     desc:'PASIVA: Multiplica los BP que dan los enemigos al morir.',stats:lv=>({bpMul:1+0.25*lv})},
+  // LUZ
+  rayo_sagrado:{id:'rayo_sagrado',element:'luz',variant:'A',name:'Rayo Sagrado',icon:'🌟',cast:450,maxLevel:99,
+    desc:'Rayo de luz que atraviesa enemigos y rebota en paredes.',stats:lv=>({dmg:5*lv,range:200+25*lv,speed:11,bounces:4})},
+  destello_luz:{id:'destello_luz',element:'luz',variant:'B',name:'Destello de Luz',icon:'💫',cast:500,maxLevel:99,
+    desc:'Área de efecto que provoca a los enemigos afectados.',stats:lv=>({radius:160+20*lv,duration:2000+lv*400})},
+  panorama_jubilo:{id:'panorama_jubilo',element:'luz',variant:'C',name:'Panorama de Júbilo',icon:'🌅',cast:700,maxLevel:99,
+    desc:'Buff temporal que aumenta el daño mágico.',stats:lv=>({magicDmgBonus:0.10*lv,duration:4500+500*lv})},
+  sabiduria:{id:'sabiduria',element:'luz',variant:'D',passive:true,name:'Sabiduría',icon:'📖',maxLevel:99,
+    desc:'PASIVA: aumenta la duración de los buffs.',stats:lv=>({buffDurationBonus:0.10*lv})},
 };
 const SKILL_GROUPS=[
   [SKILL_DEF.bola_fuego,SKILL_DEF.lanzallamas,SKILL_DEF.infierno,SKILL_DEF.violencia],
   [SKILL_DEF.escudo,SKILL_DEF.espinas,SKILL_DEF.golem,SKILL_DEF.resistencia],
-  [SKILL_DEF.curacion,SKILL_DEF.regeneracion,SKILL_DEF.tsunami,SKILL_DEF.sabiduria],
+  [SKILL_DEF.curacion,SKILL_DEF.regeneracion,SKILL_DEF.tsunami],
   [SKILL_DEF.disparo_aumentado,SKILL_DEF.paralisis,SKILL_DEF.invisibilidad,SKILL_DEF.destreza],
+  [SKILL_DEF.rayo_sagrado,SKILL_DEF.destello_luz,SKILL_DEF.panorama_jubilo,SKILL_DEF.sabiduria],
 ];
-const ELEMENT_LABELS={fuego:'🔥 Fuego',tierra:'🪨 Tierra',agua:'🌊 Agua',aire:'💨 Aire'};
+const ELEMENT_LABELS={fuego:'🔥 Fuego',tierra:'🪨 Tierra',agua:'🌊 Agua',aire:'💨 Aire',luz:'🌟 Luz'};
 
 
 
@@ -1214,6 +1222,14 @@ function violenceDamageMul(){
   const lv=(save.skillLevels&&save.skillLevels['violencia'])||0;
   return lv>0?1+(SKILL_DEF.violencia.stats(lv).dmgBonus||0):1;
 }
+function buffDurationMul(){
+  const lv=(save.skillLevels&&save.skillLevels['sabiduria'])||0;
+  return lv>0?1+(SKILL_DEF.sabiduria.stats(lv).buffDurationBonus||0):1;
+}
+function magicDamageMul(){
+  const s=gs&&gs.player&&(gs.player.skills||[]).find(x=>x&&x.id==='panorama_jubilo'&&x.active&&Date.now()<x.end);
+  return s?1+(s.magicDmgBonus||0):1;
+}
 function isInvisible(){return skillActive('invisibilidad');}
 function ensureStarterArmor(){
   // Ensure chaleco_comun is "owned" (it's always free)
@@ -1315,8 +1331,8 @@ function renderCharScreen(){
     hdr+='</div>';
     sk.innerHTML=hdr;
     // All skills grouped by element
-    const ELEM_ORDER=['fuego','tierra','agua','aire'];
-    const ELEM_ICONS={fuego:'🔥',tierra:'🪨',agua:'🌊',aire:'💨'};
+    const ELEM_ORDER=['fuego','tierra','agua','aire','luz'];
+    const ELEM_ICONS={fuego:'🔥',tierra:'🪨',agua:'🌊',aire:'💨',luz:'🌟'};
     ELEM_ORDER.forEach(elem=>{
       const group=SKILL_GROUPS.find(g=>g[0]&&g[0].element===elem)||[];
       let html=`<div style="margin-bottom:16px;padding:12px;background:#0f0e14;border:1px solid rgba(255,255,255,0.06);border-radius:5px">
@@ -2190,13 +2206,14 @@ function buildSkillInstances(){
     const sd=SKILL_DEF[sid];
     const lv=(save.skillLevels||{})[sid]||0;
     const st=sd.stats(lv);
+    const duration=st.duration?Math.round(st.duration*buffDurationMul()):0;
     return{id:sid,name:sd.name,icon:sd.icon,cast:sd.cast,
       lv,dmg:st.dmg||0,radius:st.radius||0,range:st.range||0,
-      coneAngle:st.coneAngle||0,duration:st.duration||0,
+      coneAngle:st.coneAngle||0,duration,
       absorb:st.absorb||0,reflect:st.reflect||0,
       heal:st.heal||0,healPerSec:st.healPerSec||0,
-      dmgBonus:st.dmgBonus||0,stunMs:st.stunMs||0,
-      speed:st.speed||7,
+      dmgBonus:st.dmgBonus||0,magicDmgBonus:st.magicDmgBonus||0,stunMs:st.stunMs||0,
+      speed:st.speed||7,bounces:st.bounces||0,hitChance:st.hitChance,
       castEnd:0,active:false,end:0,
       regenInterval:0,
     };
@@ -2239,7 +2256,7 @@ function initGame(){
       x:3*TILE,y:3*TILE,w:28,h:28,
       hp:Math.round((save.stats.hp+as.bonusHp+(()=>{const _rl=(save.skillLevels&&save.skillLevels['resistencia'])||0;return _rl>0?SKILL_DEF.resistencia.stats(_rl).bonusHp:0;})())*(1+(save.stats.res||0)*0.02)),
       maxHp:Math.round((save.stats.hp+as.bonusHp+(()=>{const _rl=(save.skillLevels&&save.skillLevels['resistencia'])||0;return _rl>0?SKILL_DEF.resistencia.stats(_rl).bonusHp:0;})())*(1+(save.stats.res||0)*0.02)),
-      mp:save.stats.mp+as.bonusMp+(()=>{const _sl=(save.skillLevels&&save.skillLevels['sabiduria'])||0;return _sl>0?SKILL_DEF.sabiduria.stats(_sl).bonusMp:0;})(),maxMp:save.stats.mp+as.bonusMp+(()=>{const _sl=(save.skillLevels&&save.skillLevels['sabiduria'])||0;return _sl>0?SKILL_DEF.sabiduria.stats(_sl).bonusMp:0;})(),
+      mp:save.stats.mp+as.bonusMp,maxMp:save.stats.mp+as.bonusMp,
       freeXP:save.freeXP,bp:save.bp,
       facing:0,invTime:0,
       pockets,          // array of pocket slots
@@ -3283,7 +3300,7 @@ function useSkill(idx){
     if(!gs||gs.gameOver)return;
     const _sk=(gs.player.skills||[]).find(x=>x&&x.id===_snapSkill.id)||s;
     const _intBonus=1+(gs.player.stats.int||0)*0.02;
-    const _dmg=Math.round((_snapSkill.dmg||0)*_intBonus*violenceDamageMul());
+    const _dmg=Math.round((_snapSkill.dmg||0)*_intBonus*violenceDamageMul()*magicDamageMul());
     const _heal=Math.round((_snapSkill.heal||0)*_intBonus);
     const _range=_snapSkill.range||80;
     const _radius=_snapSkill.radius||40;
@@ -3355,8 +3372,8 @@ function useSkill(idx){
       gs._golems.push({
         x:gpos.x,y:gpos.y,
         dmg:Math.max(1,Math.round((_dmg||_snapSkill.dmg||8)/2)),
-        // Nerf: el gólem camina como un Caminante y pega la mitad.
-        speed:0.85,
+        // Nerf: el gólem camina como un Caminante, pega la mitad y ahora puede morir.
+        speed:0.85,hp:200,maxHp:200,
         active:true,size:24,r:12,color:'#8B6914',
         owner:'local',createdAt:Date.now(),lastHit:0,angle:0,wobble:0
       });
@@ -3367,9 +3384,28 @@ function useSkill(idx){
       addLog('Resistencia es pasiva — ya activa');
 
     } else if(_snapSkill.id==='tsunami'){
-      for(const e of [...gs.enemies]) damageEnemy(e,_dmg,false);
+      let hits=0;
+      for(const e of [...gs.enemies]) if(Math.random()<(_snapSkill.hitChance??0.5)){damageEnemy(e,_dmg,false);hits++;}
       spawnExplosion(_cx,_cy,400,'#0080ff');
-      addLog('Tsunami! ('+_dmg+' a todos)');
+      addLog('Tsunami! ('+_dmg+' daño, '+hits+' impactados)');
+
+    } else if(_snapSkill.id==='rayo_sagrado'){
+      gs.bullets.push({x:_cx,y:_cy,vx:Math.cos(_snapAngle)*(_snapSkill.speed||11),vy:Math.sin(_snapAngle)*(_snapSkill.speed||11),
+        dmg:_dmg,range:_snapSkill.range||225,traveled:0,type:'lightning',r:7,color:'#fff6a0',pierce:true,bounces:_snapSkill.bounces||4,hitEnemies:[]});
+      addLog(`🌟 Rayo sagrado! (${_dmg} daño)`);
+
+    } else if(_snapSkill.id==='destello_luz'){
+      let provoked=0;
+      for(const e of [...gs.enemies]){
+        if(Math.hypot(e.x+e.size/2-_snapWx,e.y+e.size/2-_snapWy)<_radius){
+          e.alerted=true;e._tauntUntil=Date.now()+(_snapSkill.duration||2000);provoked++;
+        }
+      }
+      spawnExplosion(_snapWx,_snapWy,_radius,'#fff6a0');addLog(`💫 Destello: ${provoked} provocados`);
+
+    } else if(_snapSkill.id==='panorama_jubilo'){
+      _sk.active=true;_sk.end=Date.now()+(_snapSkill.duration||5000);
+      addLog(`🌅 Daño mágico +${Math.round((_snapSkill.magicDmgBonus||0)*100)}%`);
 
     } else if(_snapSkill.id==='sabiduria'){
       addLog('Sabiduría es pasiva — ya activa');
@@ -3780,6 +3816,7 @@ function drawGolems(){
     ctx.fillStyle='#8B6914';ctx.fillRect(-g.size*0.34,-g.size*0.48,g.size*0.68,g.size*0.28);
     ctx.fillStyle='#b8994a';ctx.fillRect(-g.size*0.22,-g.size*0.40,g.size*0.16,g.size*0.08);ctx.fillRect(g.size*0.06,-g.size*0.40,g.size*0.16,g.size*0.08);
     ctx.fillStyle='#4d3d1b';ctx.fillRect(-g.size*0.50,-g.size*0.10,g.size*0.14,g.size*0.40);ctx.fillRect(g.size*0.36,-g.size*0.10,g.size*0.14,g.size*0.40);
+    if(g.hp<g.maxHp){ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(-g.size/2,-g.size*0.72,g.size,4);ctx.fillStyle='#3a9a3a';ctx.fillRect(-g.size/2,-g.size*0.72,g.size*(g.hp/g.maxHp),4);}
     ctx.fillStyle='#c8a85a';ctx.font='8px Courier New';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('GÓLEM',0,-g.size*0.58);
     ctx.restore();
   }
@@ -3864,7 +3901,15 @@ function update(dt){
 
   for(const e of gs.enemies){
     e.wobble+=0.08;if(e.stunTime>now)continue;
-    const px=p.x+p.w/2,py=p.y+p.h/2,ex=e.x+e.size/2,ey=e.y+e.size/2;
+    let px=p.x+p.w/2,py=p.y+p.h/2,ex=e.x+e.size/2,ey=e.y+e.size/2;
+    let targetGolem=null,targetGolemDist=Infinity;
+    for(const g of (gs._golems||[])){
+      if(!g||!g.active)continue;
+      const gd=Math.hypot(g.x+g.size/2-ex,g.y+g.size/2-ey);
+      if(gd<e.detect&&gd<targetGolemDist){targetGolem=g;targetGolemDist=gd;}
+    }
+    if(targetGolem){px=targetGolem.x+targetGolem.size/2;py=targetGolem.y+targetGolem.size/2;e.alerted=true;e._targetGolem=targetGolem;}
+    else { if(e._tauntUntil&&e._tauntUntil>now)e.alerted=true; e._targetGolem=null; }
     const edx=px-ex,edy=py-ey,dist=Math.hypot(edx,edy);
     // Detection: alert if in range (including noise bonus) or already alerted and dist<400.
     // Si un gólem lo golpeó, el enemigo busca al invocador aunque esté lejos por unos segundos.
@@ -3895,7 +3940,10 @@ function update(dt){
       const thorns=p.skills.find(s=>s&&s.id==='espinas'&&s.active&&now<s.end);
       if(shield){dmg=Math.floor(dmg*(1-shield.absorb));addLog('🛡️ Escudo');}
       if(thorns){const ref=Math.round(dmg*thorns.reflect);if(ref>0){for(const ae of gs.enemies)if(Math.hypot(ae.x+ae.size/2-p.x-p.w/2,ae.y+ae.size/2-p.y-p.h/2)<60)damageEnemy(ae,ref,false);}}
-      if(p.invTime<now){p.hp-=dmg;p.invTime=now+500;spawnDmgNumber(p.x+p.w/2,p.y,dmg,true);if(p.hp<=0){gs.gameOver=true;persistRunProgress();}}
+      if(e._targetGolem&&e._targetGolem.active){
+        e._targetGolem.hp-=dmg;spawnDmgNumber(e._targetGolem.x+e._targetGolem.size/2,e._targetGolem.y,dmg,true);
+        if(e._targetGolem.hp<=0){e._targetGolem.active=false;spawnExplosion(e._targetGolem.x+12,e._targetGolem.y+12,34,'#8B6914');addLog('🪨 Gólem destruido');}
+      } else if(p.invTime<now){p.hp-=dmg;p.invTime=now+500;spawnDmgNumber(p.x+p.w/2,p.y,dmg,true);if(p.hp<=0){gs.gameOver=true;persistRunProgress();}}
     }
   }
   // Separation
@@ -3911,10 +3959,22 @@ function update(dt){
   // Bullets
   for(let i=gs.bullets.length-1;i>=0;i--){
     const b=gs.bullets[i];b.x+=b.vx;b.y+=b.vy;b.traveled+=Math.hypot(b.vx,b.vy);
-    let hit=false;if(isWall(b.x,b.y))hit=true;
+    let hit=false;
+    if(isWall(b.x,b.y)){
+      if(b.type==='lightning'&&(b.bounces||0)>0){
+        const prevX=b.x-b.vx,prevY=b.y-b.vy;
+        if(isWall(b.x,prevY)) b.vx*=-1;
+        if(isWall(prevX,b.y)) b.vy*=-1;
+        b.x=prevX+b.vx;b.y=prevY+b.vy;b.bounces--;
+        spawnExplosion(b.x,b.y,12,'#fff6a0');
+      } else hit=true;
+    }
     if(!hit)for(let j=gs.enemies.length-1;j>=0;j--){const e=gs.enemies[j];
       if(Math.hypot(b.x-e.x-e.size/2,b.y-e.y-e.size/2)<e.size/2+b.r){
-        damageEnemy(e,b.dmg,false);if(b.explosive){const er=b.explodeRadius||60;spawnExplosion(b.x,b.y,er,'#ff6000');for(const e2 of [...gs.enemies])if(Math.hypot(b.x-e2.x-e2.size/2,b.y-e2.y-e2.size/2)<er)damageEnemy(e2,Math.round(b.dmg*0.5),false);}
+        if(!b.hitEnemies||!b.hitEnemies.includes(e)){
+          if(b.hitEnemies)b.hitEnemies.push(e);
+          damageEnemy(e,b.dmg,false);if(b.explosive){const er=b.explodeRadius||60;spawnExplosion(b.x,b.y,er,'#ff6000');for(const e2 of [...gs.enemies])if(Math.hypot(b.x-e2.x-e2.size/2,b.y-e2.y-e2.size/2)<er)damageEnemy(e2,Math.round(b.dmg*0.5),false);}
+        }
         if(!b.pierce){hit=true;break;}
       }
     }
