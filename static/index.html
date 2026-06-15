@@ -1257,7 +1257,6 @@ function renderCharScreen(){
   applyDefaultAtts();
   document.getElementById('char-level-disp').textContent=save.level;
   renderLoadout();
-  renderVehicles();
   document.getElementById('char-xp-disp').textContent=save.freeXP;
   document.getElementById('char-bp-disp').textContent=save.bp;
   document.getElementById('char-xp-cur').textContent=Math.round(save.xp);
@@ -1377,6 +1376,7 @@ function renderCharScreen(){
   }catch(err){sk.innerHTML='<div style="color:red;font-size:11px">Error: '+err.message+'</div>';}
   // Armor equip section
   renderArmorInv();
+  renderVehicles();
 }
 function allArmorInventory(){
   if(!save.ownedArmors)save.ownedArmors=[];
@@ -1598,7 +1598,7 @@ function renderVehicles(){
         ${owned
           ?'<div style="font-size:9px;color:#c8a060">✓ En garaje</div>'
           :`<button class="action-btn" style="font-size:9px" onclick="buyVehicle('${v.id}')" ${canBuy?'':' disabled'}>
-              ${v.cost===0?'GRATIS':can?`${v.cost} BP`:`${v.cost} BP`}
+              ${v.cost===0?'GRATIS':canBuy?`${v.cost} BP`:`${v.cost} BP`}
             </button>`}
       </div>`;
     });
