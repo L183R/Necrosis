@@ -552,44 +552,59 @@ function skillCostXP(sd,lv){
 const SKILL_DEF={
   // FUEGO
   bola_fuego:{id:'bola_fuego',element:'fuego',variant:'A',name:'Bola de Fuego',icon:'🔥',cast:600,maxLevel:99,
+    mpCost:lv=>Math.min(18,9+lv*0.25),
     desc:'Proyectil explosivo hacia el cursor.',stats:lv=>({dmg:50+lv*10,radius:48+lv*2,speed:7})},
   lanzallamas:{id:'lanzallamas',element:'fuego',variant:'B',name:'Lanzallamas',icon:'🌋',cast:200,maxLevel:99,
+    mpCost:lv=>Math.min(15,7+lv*0.20),
     desc:'Daño en cono frontal a corta distancia.',stats:lv=>({dmg:15+lv*5,range:90+lv*5,coneAngle:Math.PI/3})},
   infierno:{id:'infierno',element:'fuego',variant:'C',name:'Infierno',icon:'💀',cast:1200,maxLevel:99,
+    mpCost:lv=>Math.min(45,26+lv*0.50),
     desc:'Gran daño en área alrededor del personaje. Empuja enemigos.',stats:lv=>({dmg:115+lv*5,radius:100+lv*10,knockback:250})},
   violencia:{id:'violencia',element:'fuego',variant:'D',passive:true,name:'Violencia',icon:'💥',maxLevel:99,
-    desc:'PASIVA: +10% a cualquier daño permanentemente.',stats:lv=>({dmgBonus:lv*0.10})},
+    desc:'PASIVA: +10% al daño de armas permanentemente.',stats:lv=>({weaponDmgBonus:lv*0.10})},
   // TIERRA
   escudo:{id:'escudo',element:'tierra',variant:'A',name:'Escudo',icon:'🛡️',cast:300,maxLevel:99,
+    mpCost:lv=>Math.min(22,12+lv*0.25),
     desc:'Reduce el daño recibido temporalmente.',stats:lv=>({absorb:0.75,duration:(3+lv)*1000})},
   espinas:{id:'espinas',element:'tierra',variant:'B',name:'Espinas',icon:'🌵',cast:300,maxLevel:99,
+    mpCost:lv=>Math.min(24,14+lv*0.25),
     desc:'Refleja parte del daño de los atacantes.',stats:lv=>({reflect:0.20+lv*0.10,duration:5000})},
   golem:{id:'golem',element:'tierra',variant:'C',name:'Gólem',icon:'🪨',cast:1500,maxLevel:99,
+    mpCost:lv=>Math.min(50,32+lv*0.40),
     desc:'Crea una roca que persigue y daña enemigos hasta terminar el piso.',stats:lv=>({dmg:10+lv*2,speed:0.7})},
   resistencia:{id:'resistencia',element:'tierra',variant:'D',passive:true,name:'Resistencia',icon:'🦴',maxLevel:99,
     desc:'PASIVA: +2 HP máximo por nivel al iniciar partida.',stats:lv=>({bonusHp:lv*5})},
   // AGUA
   curacion:{id:'curacion',element:'agua',variant:'A',name:'Curación',icon:'💚',cast:800,maxLevel:99,
+    mpCost:lv=>Math.min(24,10+lv*0.30),
     desc:'Restaura vida instantáneamente.',stats:lv=>({heal:40+lv*10})},
   regeneracion:{id:'regeneracion',element:'agua',variant:'B',name:'Regeneración',icon:'✨',cast:500,maxLevel:99,
+    mpCost:lv=>Math.min(28,16+lv*0.30),
     desc:'Regenera vida durante un tiempo.',stats:lv=>({healPerSec:7+lv*1,duration:Math.round((4.5+lv*0.5)*1000)})},
   tsunami:{id:'tsunami',element:'agua',variant:'C',name:'Tsunami',icon:'🌊',cast:2000,maxLevel:99,
+    mpCost:lv=>Math.min(55,34+lv*0.60),
     desc:'Daño doble, pero cada enemigo tiene 50% de probabilidad de ser golpeado.',stats:lv=>({dmg:10+lv*6,hitChance:0.5})},
   // AIRE
   disparo_aumentado:{id:'disparo_aumentado',element:'aire',variant:'A',name:'Disparo Aumentado',icon:'⚡',cast:400,maxLevel:99,
+    mpCost:lv=>Math.min(28,16+lv*0.25),
     desc:'Aumenta el daño de armas de fuego temporalmente.',stats:lv=>({dmgBonus:(45+lv*5)/100,duration:Math.round((4.5+lv*0.5)*1000)})},
   paralisis:{id:'paralisis',element:'aire',variant:'B',name:'Parálisis',icon:'❄️',cast:500,maxLevel:99,
+    mpCost:lv=>Math.min(32,18+lv*0.30),
     desc:'Paraliza enemigos en un área por 2 segundos.',stats:lv=>({radius:60+lv*10,stunMs:2000})},
   invisibilidad:{id:'invisibilidad',element:'aire',variant:'C',name:'Invisibilidad',icon:'👻',cast:800,maxLevel:99,
+    mpCost:lv=>Math.min(42,24+lv*0.35),
     desc:'Indetectable por enemigos + armas sin ruido.',stats:lv=>({duration:Math.round((4.5+lv*0.5)*1000)})},
   destreza:{id:'destreza',element:'aire',variant:'D',passive:true,name:'Destreza',icon:'💨',maxLevel:99,
     desc:'PASIVA: Multiplica los BP que dan los enemigos al morir.',stats:lv=>({bpMul:1+0.25*lv})},
   // LUZ
   rayo_sagrado:{id:'rayo_sagrado',element:'luz',variant:'A',name:'Rayo Sagrado',icon:'🌟',cast:450,maxLevel:99,
+    mpCost:lv=>Math.min(24,12+lv*0.25),
     desc:'Rayo de luz que atraviesa enemigos y rebota en paredes.',stats:lv=>({dmg:5*lv,range:200+25*lv,speed:11,bounces:4})},
   destello_luz:{id:'destello_luz',element:'luz',variant:'B',name:'Destello de Luz',icon:'💫',cast:500,maxLevel:99,
+    mpCost:lv=>Math.min(26,14+lv*0.25),
     desc:'Área de efecto que provoca a los enemigos afectados.',stats:lv=>({radius:160+20*lv,duration:2000+lv*400})},
   panorama_jubilo:{id:'panorama_jubilo',element:'luz',variant:'C',name:'Panorama de Júbilo',icon:'🌅',cast:700,maxLevel:99,
+    mpCost:lv=>Math.min(42,24+lv*0.40),
     desc:'Buff temporal que aumenta el daño mágico.',stats:lv=>({magicDmgBonus:0.10*lv,duration:4500+500*lv})},
   sabiduria:{id:'sabiduria',element:'luz',variant:'D',passive:true,name:'Sabiduría',icon:'📖',maxLevel:99,
     desc:'PASIVA: aumenta la duración de los buffs.',stats:lv=>({buffDurationBonus:0.10*lv})},
@@ -602,6 +617,12 @@ const SKILL_GROUPS=[
   [SKILL_DEF.rayo_sagrado,SKILL_DEF.destello_luz,SKILL_DEF.panorama_jubilo,SKILL_DEF.sabiduria],
 ];
 const ELEMENT_LABELS={fuego:'🔥 Fuego',tierra:'🪨 Tierra',agua:'🌊 Agua',aire:'💨 Aire',luz:'🌟 Luz'};
+
+function skillMPCost(sd,lv){
+  if(!sd||sd.passive)return 0;
+  if(typeof sd.mpCost==='function')return Math.max(1,Math.round(sd.mpCost(lv||0)));
+  return Math.max(1,Math.round((sd.cast||500)*0.02));
+}
 
 
 
@@ -1240,7 +1261,7 @@ function skillActive(id){
 }
 function violenceDamageMul(){
   const lv=(save.skillLevels&&save.skillLevels['violencia'])||0;
-  return lv>0?1+(SKILL_DEF.violencia.stats(lv).dmgBonus||0):1;
+  return lv>0?1+(SKILL_DEF.violencia.stats(lv).weaponDmgBonus||0):1;
 }
 function buffDurationMul(){
   const lv=(save.skillLevels&&save.skillLevels['sabiduria'])||0;
@@ -1307,9 +1328,7 @@ function renderCharScreen(){
   const _resLv=(save.skillLevels&&save.skillLevels['resistencia'])||0;
   const _resBonus=_resLv>0?SKILL_DEF.resistencia.stats(_resLv).bonusHp:0;
   const _realMaxHp=Math.round((save.stats.hp+_as.bonusHp+_resBonus)*(1+(save.stats.res||0)*0.02));
-  const _sabLv=(save.skillLevels&&save.skillLevels['sabiduria'])||0;
-  const _sabBonus=_sabLv>0?SKILL_DEF.sabiduria.stats(_sabLv).bonusMp:0;
-  const _realMaxMp=save.stats.mp+_as.bonusMp+_sabBonus;
+  const _realMaxMp=save.stats.mp+_as.bonusMp;
   [['HP máx',_realMaxHp],['MP máx',_realMaxMp],['PISO',save.highestFloor||0]].forEach(([n,v])=>{
     sg.innerHTML+=`<div class="stat-card"><div class="stat-card-val">${v}</div><div class="stat-card-name">${n}</div></div>`;
   });
@@ -1380,7 +1399,7 @@ function renderCharScreen(){
             </div>
           </div>
           <div style="font-size:9px;color:#5a5248;margin-bottom:6px;line-height:1.3">${sd.desc}</div>
-          ${isUnlocked?`<div style="font-size:8px;color:#3a3028;margin-bottom:5px">${Object.entries(st).map(([k,v])=>`${k}:${typeof v==='number'?Math.round(v*10)/10:v}`).join(' ')}</div>`:''}
+          ${isUnlocked?`<div style="font-size:8px;color:#3a3028;margin-bottom:5px">${sd.passive?'':`MP:${skillMPCost(sd,lv)} `}${Object.entries(st).map(([k,v])=>`${k}:${typeof v==='number'?Math.round(v*10)/10:v}`).join(' ')}</div>`:''}
           ${isEquipped
             ?`<div style="font-size:9px;color:${vc};margin-bottom:3px">Slot ${equippedInSlot+1}</div>`
             :sd.passive?'':`<select onchange="if(this.value)equipSkillSlot(this.value,'${sd.id}')" style="width:100%;margin-bottom:4px;background:#0a0a0f;border:1px solid rgba(255,255,255,0.1);color:#c8bfa8;font-family:'Courier New',monospace;font-size:8px;padding:3px">
@@ -2227,7 +2246,7 @@ function buildSkillInstances(){
     const lv=(save.skillLevels||{})[sid]||0;
     const st=sd.stats(lv);
     const duration=st.duration?Math.round(st.duration*buffDurationMul()):0;
-    return{id:sid,name:sd.name,icon:sd.icon,cast:sd.cast,
+    return{id:sid,name:sd.name,icon:sd.icon,cast:sd.cast,mpCost:skillMPCost(sd,lv),
       lv,dmg:st.dmg||0,radius:st.radius||0,range:st.range||0,
       coneAngle:st.coneAngle||0,duration,
       absorb:st.absorb||0,reflect:st.reflect||0,
@@ -3308,9 +3327,9 @@ function useSkill(idx){
   const _sd=SKILL_DEF[s.id];
   if(_sd&&_sd.passive){addLog(`${s.icon} ${s.name} es pasiva — siempre activa`);return;}
   if(s.castEnd>now){addLog(`⏳ Lanzando…`);return;}
-  if(p.mp<s.cast*0.02){addLog('Sin magia');return;}
-  // Cost: cast_ms * 0.02 mp (cheap but proportional to cast time)
-  p.mp=Math.max(0,p.mp-(s.cast*0.02));
+  const mpCost=s.mpCost||skillMPCost(SKILL_DEF[s.id],s.lv||0);
+  if(p.mp<mpCost){addLog(`Sin magia (${mpCost} MP necesarios)`);return;}
+  p.mp=Math.max(0,p.mp-mpCost);
   s.castEnd=now+s.cast;
   const wx=gs.mouseX+gs.camera.x,wy=gs.mouseY+gs.camera.y;
   const angle=Math.atan2(wy-p.y-p.h/2,wx-p.x-p.w/2);
@@ -3324,7 +3343,7 @@ function useSkill(idx){
     if(!gs||gs.gameOver)return;
     const _sk=(gs.player.skills||[]).find(x=>x&&x.id===_snapSkill.id)||s;
     const _intBonus=1+(gs.player.stats.int||0)*0.02;
-    const _dmg=Math.round((_snapSkill.dmg||0)*_intBonus*violenceDamageMul()*magicDamageMul()*(1+(armorStats().dmgPctBonus||0)/100));
+    const _dmg=Math.round((_snapSkill.dmg||0)*_intBonus*magicDamageMul()*(1+(armorStats().dmgPctBonus||0)/100));
     const _heal=Math.round((_snapSkill.heal||0)*_intBonus);
     const _range=_snapSkill.range||80;
     const _radius=_snapSkill.radius||40;
@@ -3388,7 +3407,7 @@ function useSkill(idx){
 
     } else if(_snapSkill.id==='violencia'){
       _sk.active=true;_sk.end=Date.now()+(_snapSkill.duration||5000);
-      addLog('Violencia +'+Math.round((_snapSkill.dmgBonus||0.1)*100)+'%');
+      addLog('Violencia de armas +'+Math.round((_snapSkill.weaponDmgBonus||0.1)*100)+'%');
 
     } else if(_snapSkill.id==='golem'){
       gs._golems=gs._golems||[];
