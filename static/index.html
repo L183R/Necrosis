@@ -2771,8 +2771,13 @@ function generateChestLoot(){
   }
 
   if(cat==='armor'){
-    const ar=genRandomArmor(gs.floor);
-    return{type:'armor',icon:'\u{1F9E5}',name:ar.name,desc:`HP+${ar.bonusHp} MP+${ar.bonusMp} ${ar.pockets}bol`,data:ar};
+    const armorEntries=ARMOR_CAT
+      .filter(a=>!a.free&&a.cost>0&&!isArmorOwned(a.id))
+      .map(a=>({weight:15000/a.cost,value:a}));
+    if(!armorEntries.length) return generateChestLoot();
+    const pick=weightedPick(armorEntries);
+    const ar=cloneShopArmorInstance(pick.id);
+    return{type:'armor',icon:ar.icon||'\u{1F9E5}',name:ar.name,desc:`HP+${ar.bonusHp} MP+${ar.bonusMp} ${ar.pockets}bol`,data:ar};
   }
 
   return null;
@@ -2792,19 +2797,6 @@ function openChest(chest){
   if(chest.open)return;
   chest.open=true;
   // Immediate BP — taken automatically; everything else goes to modal
-}
-
-function genRandomArmor(floor){
-  const pockets=1+Math.floor(Math.random()*3);
-  const bonusHp=5+Math.floor(Math.random()*36)+floor*2;
-  const bonusMp=Math.floor(Math.random()*21)+floor;
-  const names=['Mono Manchado','Armadura Improvisada','Chaleco Roto','Chaqueta de Cuero','Cota de Malla'];
-  const icons=['👕','🧤','🥋','👔','🧣'];
-  const ri=Math.floor(Math.random()*names.length);
-  const stars=rollArmorStars();
-  const armor={uid:nextUid(),shopId:null,name:names[ri],icon:icons[ri],pockets,bonusHp,bonusMp,secondary:{},stars};
-  SEC_GROUPS.forEach(g=>{if(Math.random()<0.05){const k=g[Math.floor(Math.random()*g.length)];armor.secondary[k]=5+Math.floor(Math.random()*46);}});
-  return armor;
 }
 
 // ═══════════════════════════════════════════════════════════
