@@ -16,6 +16,14 @@ canvas{display:block;position:fixed;inset:0}
 .menu-btn{padding:13px 52px;border:1px solid rgba(255,255,255,0.14);background:transparent;color:#c8bfa8;font-family:'Courier New',monospace;font-size:12px;letter-spacing:4px;cursor:pointer;text-transform:uppercase;transition:all 0.18s;margin:5px;min-width:240px}
 .menu-btn:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.3);color:#f0e6d0}
 #menu-save-info{margin-top:28px;font-size:10px;letter-spacing:2px;color:#3a3028}
+#vehicle-intro{position:fixed;inset:0;background:radial-gradient(circle at 50% 35%,rgba(32,28,24,0.92),rgba(10,10,15,0.98) 58%,#050507);z-index:120;display:flex;align-items:center;justify-content:center;overflow:hidden;pointer-events:none}
+#vehicle-intro.hidden{display:none!important}
+#vehicle-intro-road{position:absolute;left:0;right:0;top:55%;height:86px;background:linear-gradient(to bottom,#111,#1c1a18 45%,#0d0d10);border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08)}
+#vehicle-intro-road:after{content:'';position:absolute;left:0;right:0;top:41px;height:3px;background:repeating-linear-gradient(to right,rgba(240,230,208,0.15) 0 46px,transparent 46px 86px)}
+#vehicle-intro-car{position:absolute;top:calc(55% - 24px);left:-150px;font-size:56px;filter:drop-shadow(0 10px 12px rgba(0,0,0,0.75));animation:vehicle-drive 3s cubic-bezier(.18,.82,.22,1) forwards}
+#vehicle-intro-label{position:absolute;top:35%;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:4px;color:#7a6e5e;text-align:center;text-transform:uppercase}
+#vehicle-intro-name{display:block;margin-top:8px;font-size:18px;letter-spacing:5px;color:#c8bfa8}
+@keyframes vehicle-drive{0%{transform:translateX(0) scale(0.92)}12%{transform:translateX(14vw) scale(1)}82%{transform:translateX(calc(100vw + 120px)) scale(1)}100%{transform:translateX(calc(100vw + 220px)) scale(0.96)}}
 #screen-char{background:#0d0d12;overflow-y:auto;padding:32px 24px;align-items:stretch;justify-content:flex-start}
 .char-wrap{max-width:720px;margin:0 auto;width:100%}
 .char-header{display:flex;align-items:center;gap:20px;margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,0.07)}
@@ -63,6 +71,7 @@ canvas{display:block;position:fixed;inset:0}
 .log-entry{font-size:11px;color:#c8bfa8;opacity:1;transition:opacity 1s;margin-bottom:2px}
 #levelup-banner{position:absolute;top:28%;left:50%;transform:translate(-50%,-50%);font-size:24px;letter-spacing:6px;color:#f39c12;opacity:0;transition:opacity 0.4s;pointer-events:none;white-space:nowrap}
 #wave-banner{position:absolute;top:20%;left:50%;transform:translate(-50%,-50%);font-size:14px;letter-spacing:5px;color:#c04030;opacity:0;transition:opacity 0.4s;pointer-events:none;white-space:nowrap}
+#countdown-hint{position:absolute;top:30%;left:50%;transform:translate(-50%,-50%);font-size:10px;letter-spacing:4px;color:#8a7e6e;opacity:0;transition:opacity 0.2s;pointer-events:none;white-space:nowrap;text-align:center}
 #dmg-pool{position:absolute;inset:0;pointer-events:none}
 #hud{position:absolute;bottom:0;left:0;right:0;padding:8px 14px 10px;background:linear-gradient(to top,rgba(0,0,0,0.9),transparent)}
 #stats-row{display:flex;align-items:flex-end;gap:12px;margin-bottom:4px;flex-wrap:wrap}
@@ -131,12 +140,17 @@ canvas{display:block;position:fixed;inset:0}
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="vehicle-intro" class="hidden">
+  <div id="vehicle-intro-label">Preparando expedición<span id="vehicle-intro-name"></span></div>
+  <div id="vehicle-intro-road"></div>
+  <div id="vehicle-intro-car">🚗</div>
+</div>
 
 <!-- MAIN MENU -->
 <div class="screen" id="screen-menu">
   <div id="menu-title">NECROSIS</div>
   <div id="menu-sub">SURVIVAL RPG</div>
-  <button class="menu-btn" onclick="showScreen('mission')">▶ JUGAR</button>
+  <button class="menu-btn" onclick="playVehicleIntroAndShowMission()">▶ JUGAR</button>
   <button class="menu-btn" onclick="showScreen('char')">◈ PERSONAJE</button>
   <button class="menu-btn" onclick="showScreen('base')">🏗 BASE</button>
   <button class="menu-btn" onclick="resetSave()" style="margin-top:18px;font-size:10px;opacity:0.5">✕ BORRAR PROGRESO</button>
@@ -240,6 +254,7 @@ canvas{display:block;position:fixed;inset:0}
   <div id="msg-log"></div>
   <div id="levelup-banner"></div>
   <div id="wave-banner"></div>
+  <div id="countdown-hint"></div>
   <div id="dmg-pool"></div>
   <div id="hud">
     <div id="stats-row">
@@ -714,6 +729,20 @@ function genRandomMission(idx){
       `Enemigos: ${density.label} (~${enemyCount}/piso)`,
     ],
   };
+}
+
+function playVehicleIntroAndShowMission(){
+  const overlay=document.getElementById('vehicle-intro');
+  const car=document.getElementById('vehicle-intro-car');
+  const name=document.getElementById('vehicle-intro-name');
+  const v=vehicleById(save.equippedVehicleId)||vehicleById('bicicleta')||{icon:'🚗',name:'Vehículo'};
+  name.textContent=v.name;
+  car.textContent=v.icon||'🚗';
+  car.style.animation='none';
+  void car.offsetWidth;
+  car.style.animation='vehicle-drive 3s cubic-bezier(.18,.82,.22,1) forwards';
+  overlay.classList.remove('hidden');
+  setTimeout(()=>{overlay.classList.add('hidden');showScreen('mission');},3000);
 }
 
 function renderMissionSelect(){
@@ -2318,12 +2347,13 @@ function initGame(){
     exitDoor:null,      // {x,y,open}
     waveCleared:false,
     keys:{},mouseX:W/2,mouseY:H/2,
-    tick:0,gameOver:false,paused:false,lastShotRadius:0,lastShotTime:0,
+    tick:0,gameOver:false,paused:false,countdownUntil:0,countdownStarted:0,lastShotRadius:0,lastShotTime:0,
   };
   applyDefaultAtts();
   generateMap();
   const ps=findFreePos(28,3,3);gs.player.x=ps.x;gs.player.y=ps.y;
   spawnWave();
+  startFloorCountdown();
   // Rescue mission: spawn NPC companion on first floor
   if(gs.mtype&&gs.mtype.id==='rescate'){
     const _npos=findFreePos(20,6,6);
@@ -3560,7 +3590,7 @@ function nextFloor(){
   document.getElementById('floor-num').textContent=gs.floor;
   document.getElementById('floor-max').textContent=gs.maxFloors;
 
-  addLog(`══ PISO ${gs.floor} ══`);persistRunProgress();spawnWave();
+  addLog(`══ PISO ${gs.floor} ══`);persistRunProgress();spawnWave();startFloorCountdown();
 }
 function persistRunProgress(){
   if(!gs)return;const p=gs.player;
@@ -3831,6 +3861,35 @@ function collectMines(){
   if(changed)writeSave();
 }
 
+function startFloorCountdown(){
+  if(!gs)return;
+  const now=Date.now();
+  gs.countdownStarted=now;
+  gs.countdownUntil=now+3000;
+  const hint=document.getElementById('countdown-hint');
+  if(hint){hint.style.opacity='1';hint.textContent='OBSERVÁ TU POSICIÓN Y LA DE LOS ENEMIGOS';}
+}
+
+function isCountdownActive(){
+  return !!(gs&&gs.countdownUntil&&Date.now()<gs.countdownUntil);
+}
+
+function drawCountdownOverlay(){
+  if(!isCountdownActive())return;
+  const left=Math.max(0,gs.countdownUntil-Date.now());
+  const n=Math.max(1,Math.ceil(left/1000));
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.28)';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold 82px Courier New';
+  ctx.fillStyle='rgba(240,230,208,0.96)';
+  ctx.shadowColor='rgba(192,57,43,0.65)';ctx.shadowBlur=26;
+  ctx.fillText(String(n),W/2,H*0.42);
+  ctx.shadowBlur=0;ctx.font='11px Courier New';ctx.fillStyle='#8a7e6e';
+  ctx.fillText('PREPARATE',W/2,H*0.42+70);
+  ctx.restore();
+}
+
 // ═══════════════════════════════════════════════════════════
 // UPDATE
 // ═══════════════════════════════════════════════════════════
@@ -3840,6 +3899,8 @@ function gameLoop(ts){
   if(!gs||currentScreen!=='game')return;
   if(gs.paused)return;
   if(gs.gameOver){drawGameOver();updateHUD();return;}
+  if(isCountdownActive()){draw();updateHUD();return;}
+  if(gs.countdownUntil){gs.countdownUntil=0;const hint=document.getElementById('countdown-hint');if(hint)hint.style.opacity='0';}
   update(dt);draw();updateHUD();
 }
 
@@ -4170,6 +4231,7 @@ function draw(){
   ctx.beginPath();ctx.arc(mx,my,4,0,Math.PI*2);ctx.stroke();
   ctx.restore();
   ctx.restore();
+  drawCountdownOverlay();
 }
 let _victoryShown=false;
 let _victorySnapshot=null; // snapshot of player state at victory
