@@ -2138,6 +2138,7 @@ function itemLabel(item){
   if(item.type==='consumable')return`${item.icon||'💊'} ${item.name||'Consumible'}`;
   if(item.type==='ammo'){const cap=item.cap||item.rounds||24;return`${item.icon||'🔋'} ${item.name||item.caliber} ${item.rounds}/${cap}`;}
   if(item.type==='armor')return`🧥 ${item.name||'Armadura'}`;
+  if(item.type==='armor_mod')return`${item.icon||'🔧'} ${item.name||'Mod de armadura'}`;
   if(item.type==='attachment')return`${item.icon||'🔧'} ${item.name||'Accesorio'}`;
   return item.name||item.type;
 }
@@ -2656,6 +2657,13 @@ function scenarioLootMul(cat){
   return sc.loot[cat]||1;
 }
 
+function armorWorkshopDropMul(){
+  const lv=Object.values(save.base||{})
+    .filter(b=>b&&b.buildingId==='taller_armaduras')
+    .reduce((s,b)=>s+(b.level||0),0);
+  return Math.pow(1.1,lv);
+}
+
 // ═══════════════════════════════════════════════════════════
 // MAP HELPERS
 // ═══════════════════════════════════════════════════════════
@@ -2782,14 +2790,16 @@ function generateChestLoot(){
   const pocketWepIds=p.pockets.filter(s=>s&&s.type==='weapon').map(s=>s.id);
   const pocketCals=[...new Set(pocketWepIds.map(id=>wById(id)?.caliber).filter(Boolean))];
 
+  const armorDropMul=armorWorkshopDropMul();
   const cat=weightedPick([
-    {weight:1000,          value:'none'},
-    {weight:500*luckMul,   value:'bp'},
-    {weight:300*luckMul,   value:'consumable'},
-    {weight:200*luckMul,   value:'ammo'},
-    {weight:100*luckMul,   value:'weapon'},
-    {weight:80 *luckMul,   value:'attachment'},
-    {weight:50 *luckMul,   value:'armor'},
+    {weight:1000,                    value:'none'},
+    {weight:500*luckMul,             value:'bp'},
+    {weight:300*luckMul,             value:'consumable'},
+    {weight:200*luckMul,             value:'ammo'},
+    {weight:100*luckMul,             value:'weapon'},
+    {weight:80 *luckMul,             value:'attachment'},
+    {weight:50 *luckMul*armorDropMul,value:'armor'},
+    {weight:50 *luckMul*armorDropMul,value:'armor_mod'},
   ]);
 
   if(cat==='none') return null;
@@ -2853,6 +2863,11 @@ function generateChestLoot(){
     const pick=weightedPick(armorEntries);
     const ar=cloneShopArmorInstance(pick.id);
     return{type:'armor',icon:ar.icon||'\u{1F9E5}',name:ar.name,desc:`HP+${ar.bonusHp} MP+${ar.bonusMp} ${ar.pockets}bol`,data:ar};
+  }
+
+  if(cat==='armor_mod'){
+    const mod=ARMOR_MOD_CAT[Math.floor(Math.random()*ARMOR_MOD_CAT.length)];
+    return{type:'armor_mod',icon:mod.icon||'🔧',name:mod.name,desc:`Mod de armadura — ${mod.stat} +${mod.value}`,data:{modId:mod.id}};
   }
 
   return null;
@@ -2992,6 +3007,8 @@ function takeChestItem(idx){
       p.pockets[freeSlot]={type:'armor',icon:l.icon||'🧥',name:l.data.name,data:l.data};
     } else if(l.type==='attachment'){
       p.pockets[freeSlot]={type:'attachment',icon:l.icon,name:l.name,attId:l.data.attId,weaponId:l.data.weaponId};
+    } else if(l.type==='armor_mod'){
+      p.pockets[freeSlot]={type:'armor_mod',icon:l.icon,name:l.name,modId:l.data.modId};
     }
     addLog(`${l.icon} ${l.name} → bolsillo ${freeSlot+1}`);
     chest.taken=true;
