@@ -584,6 +584,8 @@ const SKILL_DEF={
   tsunami:{id:'tsunami',element:'agua',variant:'C',name:'Tsunami',icon:'🌊',cast:2000,maxLevel:99,
     mpCost:lv=>Math.min(55,34+lv*0.60),
     desc:'Daño doble, pero cada enemigo tiene 50% de probabilidad de ser golpeado.',stats:lv=>({dmg:10+lv*6,hitChance:0.5})},
+  dilusion:{id:'dilusion',element:'agua',variant:'D',passive:true,name:'Dilusión',icon:'🧪',maxLevel:99,
+    desc:'PASIVA: reduce el tiempo de casteo de las habilidades.',stats:lv=>({castTimeMul:20/(20+lv)})},
   // AIRE
   disparo_aumentado:{id:'disparo_aumentado',element:'aire',variant:'A',name:'Disparo Aumentado',icon:'⚡',cast:400,maxLevel:99,
     mpCost:lv=>Math.min(28,16+lv*0.25),
@@ -612,7 +614,7 @@ const SKILL_DEF={
 const SKILL_GROUPS=[
   [SKILL_DEF.bola_fuego,SKILL_DEF.lanzallamas,SKILL_DEF.infierno,SKILL_DEF.violencia],
   [SKILL_DEF.escudo,SKILL_DEF.espinas,SKILL_DEF.golem,SKILL_DEF.resistencia],
-  [SKILL_DEF.curacion,SKILL_DEF.regeneracion,SKILL_DEF.tsunami],
+  [SKILL_DEF.curacion,SKILL_DEF.regeneracion,SKILL_DEF.tsunami,SKILL_DEF.dilusion],
   [SKILL_DEF.disparo_aumentado,SKILL_DEF.paralisis,SKILL_DEF.invisibilidad,SKILL_DEF.destreza],
   [SKILL_DEF.rayo_sagrado,SKILL_DEF.destello_luz,SKILL_DEF.panorama_jubilo,SKILL_DEF.sabiduria],
 ];
@@ -1266,6 +1268,10 @@ function violenceDamageMul(){
 function buffDurationMul(){
   const lv=(save.skillLevels&&save.skillLevels['sabiduria'])||0;
   return lv>0?1+(SKILL_DEF.sabiduria.stats(lv).buffDurationBonus||0):1;
+}
+function castTimeMul(){
+  const lv=(save.skillLevels&&save.skillLevels['dilusion'])||0;
+  return lv>0?(SKILL_DEF.dilusion.stats(lv).castTimeMul||1):1;
 }
 function magicDamageMul(){
   const s=gs&&gs.player&&(gs.player.skills||[]).find(x=>x&&x.id==='panorama_jubilo'&&x.active&&Date.now()<x.end);
@@ -2246,7 +2252,8 @@ function buildSkillInstances(){
     const lv=(save.skillLevels||{})[sid]||0;
     const st=sd.stats(lv);
     const duration=st.duration?Math.round(st.duration*buffDurationMul()):0;
-    return{id:sid,name:sd.name,icon:sd.icon,cast:sd.cast,mpCost:skillMPCost(sd,lv),
+    const cast=sd.passive?0:Math.max(50,Math.round((sd.cast||500)*castTimeMul()));
+    return{id:sid,name:sd.name,icon:sd.icon,cast,mpCost:skillMPCost(sd,lv),
       lv,dmg:st.dmg||0,radius:st.radius||0,range:st.range||0,
       coneAngle:st.coneAngle||0,duration,
       absorb:st.absorb||0,reflect:st.reflect||0,
