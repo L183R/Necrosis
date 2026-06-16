@@ -474,8 +474,8 @@ const SC2=lv=>Math.round(200*(lv+1)*Math.pow(1.2,lv));
 
 // ══════════════════════════════════════════════════════
 // SKILL COST FORMULA
-// cost = base * 2^nivel * 50_000_000
-//        / ((xpTotal + 10000) * (xpElemento + 5000))
+// coste = base * 2^nivel * 0,999^sqrt(XP usada)
+// XP usada es la XP total ya invertida en magias.
 // Bases: A=100, B=200, C=500, D=1000
 // ══════════════════════════════════════════════════════
 const SKILL_BASE={A:100,B:200,C:500,D:1000};
@@ -502,10 +502,9 @@ function xpSpentElement(element){
 
 function skillCostXP(sd,lv){
   const base=SKILL_BASE[sd.variant]||100;
-  const numerator=base*Math.pow(2,lv)*5000000000;
-  const xpTotal=xpSpentTotal();
-  const xpElem=xpSpentElement(sd.element);
-  return Math.max(1,Math.round(numerator/((xpTotal+100000)*(xpElem+50000))));
+  const xpUsed=xpSpentTotal();
+  const xpDiscount=Math.pow(0.999,Math.sqrt(xpUsed));
+  return Math.max(1,Math.round(base*Math.pow(2,lv)*xpDiscount));
 }
 
 const SKILL_DEF={
