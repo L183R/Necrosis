@@ -735,7 +735,7 @@ function playVehicleIntroAndShowMission(){
   const overlay=document.getElementById('vehicle-intro');
   const car=document.getElementById('vehicle-intro-car');
   const name=document.getElementById('vehicle-intro-name');
-  const v=vehicleById(save.equippedVehicleId)||vehicleById('bicicleta')||{icon:'🚗',name:'Vehículo'};
+  const v=vhById(save.equippedVehicle)||vhById('bicicleta')||{icon:'🚗',name:'Vehículo'};
   name.textContent=v.name;
   car.textContent=v.icon||'🚗';
   car.style.animation='none';
