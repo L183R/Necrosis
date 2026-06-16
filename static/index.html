@@ -1663,34 +1663,10 @@ function renderVehicles(){
     html+='</div>';
   }
 
-  // Shop
-  if(hasTaller){
-    html+=`<div style="font-size:9px;letter-spacing:2px;color:#5a5248;margin-bottom:8px">COMPRAR VEHÍCULO${save.vehicles.length>=max?' — GARAJE LLENO':''}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">`;
-    VEHICLE_CAT.forEach(v=>{
-      const owned=save.vehicles.some(sv=>sv.id===v.id);
-      const canBuy=!owned&&save.bp>=v.cost&&save.vehicles.length<max;
-      html+=`<div class="card" style="${owned?'border-color:rgba(192,160,96,0.3)':''}">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:20px">${v.icon}</span>
-          <div>
-            <div style="font-size:11px;color:#c8bfa8">${v.name}</div>
-            <div style="font-size:9px;color:#5a5248">${v.desc}</div>
-          </div>
-        </div>
-        <div style="font-size:9px;color:#3a3028;margin-bottom:6px">
-          Carga: ${v.capacity} • Misiones: ${v.missions} • Ruido: ×${v.noiseMul}
-        </div>
-        ${owned
-          ?'<div style="font-size:9px;color:#c8a060">✓ En garaje</div>'
-          :`<button class="action-btn" style="font-size:9px" onclick="buyVehicle('${v.id}')" ${canBuy?'':' disabled'}>
-              ${v.cost===0?'GRATIS':canBuy?`${v.cost} BP`:`${v.cost} BP`}
-            </button>`}
-      </div>`;
-    });
-    html+='</div>';
-  } else {
+  if(!hasTaller){
     html+=`<div style="font-size:10px;color:#3a3028;padding:8px">Construye el Taller Mecánico en la Base para gestionar vehículos.</div>`;
+  } else if(!save.vehicles.length){
+    html+=`<div style="font-size:10px;color:#3a3028;padding:8px">No tenés vehículos. Encontralos al completar misiones de Vehículo.</div>`;
   }
 
   el.innerHTML=html;
@@ -1898,7 +1874,7 @@ function renderWorkshopMecanico(el){
   el.innerHTML='';
   const vehicles=save.vehicles||[];
   if(!vehicles.length){
-    el.innerHTML=`<div style="font-size:10px;color:#3a3028;margin-bottom:12px">No tenés vehículos. Compralos a continuación.</div>`;
+    el.innerHTML=`<div style="font-size:10px;color:#3a3028;margin-bottom:12px">No tenés vehículos. Encontralos al completar misiones de Vehículo.</div>`;
   }
 
   // Vehicle slots
@@ -1940,28 +1916,6 @@ function renderWorkshopMecanico(el){
     el.appendChild(sec);
   });
 
-  // Buy vehicles
-  const max=maxVehicles();
-  const buyDiv=document.createElement('div');
-  buyDiv.style.cssText='margin-top:16px';
-  buyDiv.innerHTML=`<div style="font-size:9px;color:#5a5248;margin-bottom:8px">COMPRAR VEHÍCULO (${vehicles.length}/${max})</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      ${VEHICLE_CAT.map(v=>{
-        const owned=vehicles.some(sv=>sv.id===v.id);
-        const canBuy=!owned&&save.bp>=v.cost&&vehicles.length<max;
-        return `<div class="card">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-            <span style="font-size:18px">${v.icon}</span>
-            <div><div style="font-size:10px;color:#c8bfa8">${v.name}</div>
-            <div style="font-size:8px;color:#5a5248">${v.desc} · ${v.capacity} espacios</div></div>
-          </div>
-          ${owned?'<div style="font-size:9px;color:#c8a060">✓ En garaje</div>'
-            :`<button class="action-btn" style="font-size:9px" onclick="buyVehicle('${v.id}');renderWorkshopMecanico(document.getElementById('workshop-content'))" ${canBuy?'':' disabled'}>
-              ${v.cost===0?'GRATIS':`${v.cost} BP`}</button>`}
-        </div>`;
-      }).join('')}
-    </div>`;
-  el.appendChild(buyDiv);
 }
 
 function wsMoveCargoToStash(vehicleId,idx){
