@@ -326,7 +326,7 @@ const DEFAULT_SAVE={
   freeXP:0,bp:0,
   level:1,xp:0,xpNext:100,
   stats:{hp:100,mp:50,str:10,int:10,agi:10,luck:10,res:10}, // res=resistencia, +2% HP/point
-  ownedWeapons:['cuchillo','pistola'],  // pistola starts owned but needs 9mm ammo
+  ownedWeapons:['cuchillo','pistola'],  // pistola starts owned and loaded when the run begins
   skillRanks:[1,1,1,1],   // kept for compat
   skillSlots:['bola_fuego',null,null,null], // slot 0 starts with bola_fuego
   skillLevels:{bola_fuego:1},              // bola_fuego starts at level 1
@@ -2286,7 +2286,7 @@ function buildWeaponState(){
   WEAPON_CAT.forEach(w=>{
     const ew=effectiveWeapon(w);
     ws[w.id]=w.type==='range'
-      ?{ammo:saved[w.id]!==undefined?saved[w.id]:0,
+      ?{ammo:saved[w.id]!==undefined?saved[w.id]:ew.magSize,
         mag:ew.magSize,reloading:false,reloadEnd:0,lastUsed:0,autoFiring:false}
       :{lastUsed:0};
   });
