@@ -20,7 +20,7 @@ canvas{display:block;position:fixed;inset:0}
 #vehicle-intro.hidden{display:none!important}
 #vehicle-intro-road{position:absolute;left:0;right:0;top:55%;height:86px;background:linear-gradient(to bottom,#111,#1c1a18 45%,#0d0d10);border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08)}
 #vehicle-intro-road:after{content:'';position:absolute;left:0;right:0;top:41px;height:3px;background:repeating-linear-gradient(to right,rgba(240,230,208,0.15) 0 46px,transparent 46px 86px)}
-#vehicle-intro-car{position:absolute;top:calc(55% - 24px);left:-150px;font-size:56px;filter:drop-shadow(0 10px 12px rgba(0,0,0,0.75));animation:vehicle-drive 5s cubic-bezier(.18,.82,.22,1) forwards}
+#vehicle-intro-car{position:absolute;top:calc(55% - 38px);left:-150px;width:76px;height:76px;filter:drop-shadow(0 10px 12px rgba(0,0,0,0.75));animation:vehicle-drive 5s cubic-bezier(.18,.82,.22,1) forwards}
 #vehicle-intro-label{position:absolute;top:35%;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:4px;color:#7a6e5e;text-align:center;text-transform:uppercase}
 #vehicle-intro-name{display:block;margin-top:8px;font-size:18px;letter-spacing:5px;color:#c8bfa8}
 @keyframes vehicle-drive{0%{transform:translateX(0) scale(0.92)}12%{transform:translateX(14vw) scale(1)}82%{transform:translateX(calc(100vw + 120px)) scale(1)}100%{transform:translateX(calc(100vw + 220px)) scale(0.96)}}
@@ -143,7 +143,7 @@ canvas{display:block;position:fixed;inset:0}
 <div id="vehicle-intro" class="hidden">
   <div id="vehicle-intro-label">Preparando expedición<span id="vehicle-intro-name"></span></div>
   <div id="vehicle-intro-road"></div>
-  <div id="vehicle-intro-car">🧍</div>
+  <canvas id="vehicle-intro-car" width="76" height="76" aria-label="Superviviente"></canvas>
 </div>
 
 <!-- MAIN MENU -->
@@ -731,16 +731,50 @@ function genRandomMission(idx){
   };
 }
 
+function drawSurvivorSprite(ctx, opt={}){
+  const w=opt.w||28,h=opt.h||28,now=opt.now||Date.now();
+  const phase=opt.walking?((opt.walkPhase!==undefined?opt.walkPhase:now*0.012)):0;
+  const bob=opt.walking?Math.sin(phase*2)*1.4:Math.sin(now*0.003)*0.45;
+  const swing=opt.walking?Math.sin(phase)*4:0;
+  const facing=opt.facing||0;
+  const inv=!!opt.invulnerable;
+  ctx.save();
+  ctx.translate(0,bob);
+  ctx.beginPath();ctx.ellipse(0,h/2-2,w*0.45,5,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fill();
+  ctx.strokeStyle=inv?'#ff9999':'#8a6040';ctx.lineWidth=Math.max(2,w*0.08);ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(-w*0.17,h*0.20);ctx.lineTo(-w*0.25+Math.sin(phase)*2,h*0.45+swing*0.18);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(w*0.17,h*0.20);ctx.lineTo(w*0.25-Math.sin(phase)*2,h*0.45-swing*0.18);ctx.stroke();
+  ctx.fillStyle=inv?'#ff8888':'#c8a070';ctx.beginPath();ctx.ellipse(0,2,w*0.38,h*0.5,0,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=inv?'#ffaaaa':'#e8c090';ctx.lineWidth=Math.max(2,w*0.07);
+  ctx.beginPath();ctx.moveTo(-w*0.30,-1);ctx.lineTo(-w*0.45,h*0.12+swing*0.25);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(w*0.30,-1);ctx.lineTo(w*0.45,h*0.12-swing*0.25);ctx.stroke();
+  ctx.fillStyle=inv?'#ffaaaa':'#e8c090';ctx.beginPath();ctx.arc(Math.cos(facing)*4,Math.sin(facing)*4-6,8,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+
+let _vehicleIntroAnim=0;
+function drawVehicleIntroSurvivor(){
+  const canvas=document.getElementById('vehicle-intro-car');
+  if(!canvas)return;
+  const c=canvas.getContext('2d');
+  c.clearRect(0,0,canvas.width,canvas.height);
+  c.save();c.translate(canvas.width/2,canvas.height/2+1);
+  drawSurvivorSprite(c,{w:44,h:44,walking:true,facing:0,now:Date.now()});
+  c.restore();
+  if(!document.getElementById('vehicle-intro').classList.contains('hidden'))_vehicleIntroAnim=requestAnimationFrame(drawVehicleIntroSurvivor);
+}
+
 function playVehicleIntroAndShowMission(){
   const overlay=document.getElementById('vehicle-intro');
   const car=document.getElementById('vehicle-intro-car');
   const name=document.getElementById('vehicle-intro-name');
   name.textContent='Superviviente';
-  car.textContent='🧍';
   car.style.animation='none';
   void car.offsetWidth;
   car.style.animation='vehicle-drive 5s cubic-bezier(.18,.82,.22,1) forwards';
+  cancelAnimationFrame(_vehicleIntroAnim);
   overlay.classList.remove('hidden');
+  drawVehicleIntroSurvivor();
   setTimeout(()=>{overlay.classList.add('hidden');showScreen('mission');},5000);
 }
 
@@ -3943,6 +3977,8 @@ function update(dt){
   const nx=p.x+dx*spd,ny=p.y+dy*spd,m=4;
   if(!isWall(nx+m,p.y+m)&&!isWall(nx+p.w-m,p.y+m)&&!isWall(nx+m,p.y+p.h-m)&&!isWall(nx+p.w-m,p.y+p.h-m))p.x=nx;
   if(!isWall(p.x+m,ny+m)&&!isWall(p.x+p.w-m,ny+m)&&!isWall(p.x+m,ny+p.h-m)&&!isWall(p.x+p.w-m,ny+p.h-m))p.y=ny;
+  p.walking=Math.abs(dx)>0||Math.abs(dy)>0;
+  p.walkPhase=(p.walkPhase||0)+(p.walking?dt*0.018*spd:0);
   p.x=clamp(p.x,TILE,(mapW()-1)*TILE-p.w);p.y=clamp(p.y,TILE,(mapH()-1)*TILE-p.h);
   p.facing=Math.atan2(gs.mouseY+gs.camera.y-p.y-p.h/2,gs.mouseX+gs.camera.x-p.x-p.w/2);
   // Smooth camera: lerp toward target, only move when delta > threshold
@@ -3969,7 +4005,8 @@ function update(dt){
       const nx2=n.x+(ndx/ndist)*nspd,ny2=n.y+(ndy/ndist)*nspd;
       if(!isWall(nx2+2,n.y+2)&&!isWall(nx2+n.size-2,n.y+2))n.x=nx2;
       if(!isWall(n.x+2,ny2+2)&&!isWall(n.x+n.size-2,ny2+2))n.y=ny2;
-    }
+      n.walking=true;n.walkPhase=(n.walkPhase||0)+dt*0.018*nspd;
+    } else { n.walking=false; }
     // Enemies deal damage to NPC
     for(const e of gs.enemies){
       const ex=e.x+e.size/2,ey=e.y+e.size/2;
@@ -4169,10 +4206,8 @@ function draw(){
   // Player
   const p=gs.player,now=Date.now();
   ctx.save();ctx.translate(p.x+p.w/2,p.y+p.h/2);
-  ctx.beginPath();ctx.ellipse(0,p.h/2-2,p.w*0.45,5,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fill();
   const sh=p.skills.find(s=>s&&s.id==='escudo'&&s.active&&now<s.end);if(sh){ctx.beginPath();ctx.arc(0,0,p.w*0.82,0,Math.PI*2);ctx.strokeStyle=`rgba(80,150,255,${0.38+Math.sin(now*0.005)*0.18})`;ctx.lineWidth=3;ctx.stroke();}
-  ctx.fillStyle=p.invTime>now?'#ff8888':'#c8a070';ctx.beginPath();ctx.ellipse(0,2,p.w*0.38,p.h*0.5,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=p.invTime>now?'#ffaaaa':'#e8c090';ctx.beginPath();ctx.arc(Math.cos(p.facing)*4,Math.sin(p.facing)*4-6,8,0,Math.PI*2);ctx.fill();
+  drawSurvivorSprite(ctx,{w:p.w,h:p.h,walking:p.walking,walkPhase:p.walkPhase,facing:p.facing,invulnerable:p.invTime>now,now});
   ctx.save();ctx.rotate(p.facing);const cw=curWeapon();
   if(cw.type==='melee'){ctx.fillStyle='#c0c0c0';ctx.fillRect(10,-2,18,3);}
   else{ctx.fillStyle='#404040';ctx.fillRect(10,-3,16,6);ctx.fillStyle='#707070';ctx.fillRect(22,-2,7,4);}
@@ -4182,9 +4217,7 @@ function draw(){
     const n=gs._rescueNpc;
     const nw=p.w,nh=p.h;
     ctx.save();ctx.translate(n.x+nw/2, n.y+nh/2);
-    ctx.beginPath();ctx.ellipse(0,nh/2-2,nw*0.45,5,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.45)';ctx.fill();
-    ctx.fillStyle='#c8a070';ctx.beginPath();ctx.ellipse(0,2,nw*0.38,nh*0.5,0,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#e8c090';ctx.beginPath();ctx.arc(4,-6,8,0,Math.PI*2);ctx.fill();
+    drawSurvivorSprite(ctx,{w:nw,h:nh,walking:n.walking,walkPhase:n.walkPhase,facing:0,now});
     const _hp=Math.max(0,n.hp/n.maxHp);
     const _bw=nw*1.4,_bx=-_bw/2,_by=-nh-8;
     ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(_bx-1,_by-1,_bw+2,7);
