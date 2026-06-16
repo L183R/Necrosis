@@ -1180,14 +1180,14 @@ function upgradeStatXP(statKey){
 // VEHICLES
 // ═══════════════════════════════════════════════════════════
 const VEHICLE_CAT=[
-  {id:'bicicleta',      name:'Bicicleta',        icon:'🚲', capacity:2,  missions:4, noiseMul:1.00, cost:0,    desc:'Exploración barata'},
-  {id:'moto_liviana',   name:'Moto Liviana',      icon:'🏍️', capacity:3,  missions:5, noiseMul:1.15, cost:200,  desc:'Velocidad inicial'},
-  {id:'moto_carga',     name:'Moto de Carga',     icon:'🏍️', capacity:5,  missions:5, noiseMul:1.20, cost:350,  desc:'Moto lootera'},
-  {id:'cuatriciclo',    name:'Cuatriciclo',       icon:'🚗', capacity:6,  missions:6, noiseMul:1.25, cost:500,  desc:'Balance velocidad/carga'},
-  {id:'auto_compacto',  name:'Auto Compacto',     icon:'🚗', capacity:8,  missions:6, noiseMul:1.30, cost:700,  desc:'Vehículo común'},
-  {id:'pickup',         name:'Camioneta Pickup',  icon:'🛻', capacity:12, missions:7, noiseMul:1.40, cost:1200, desc:'Lootero fuerte'},
-  {id:'furgon_blindado',name:'Furgón Blindado',   icon:'🚐', capacity:16, missions:7, noiseMul:1.55, cost:2000, desc:'Mucha carga, mucho ruido'},
-  {id:'camion_militar', name:'Camión Militar',    icon:'🚛', capacity:24, missions:8, noiseMul:1.80, cost:4000, desc:'Late game / expedición pesada'},
+  {id:'bicicleta',      name:'Bicicleta',        icon:'🚲', capacity:2,  missions:4, noiseMul:1.00, cost:0,    weight:552, desc:'Exploración barata'},
+  {id:'moto_liviana',   name:'Moto Liviana',      icon:'🏍️', capacity:3,  missions:5, noiseMul:1.15, cost:200,  weight:227, desc:'Velocidad inicial'},
+  {id:'moto_carga',     name:'Moto de Carga',     icon:'🏍️', capacity:5,  missions:5, noiseMul:1.20, cost:350,  weight:85,  desc:'Moto lootera'},
+  {id:'cuatriciclo',    name:'Cuatriciclo',       icon:'🚗', capacity:6,  missions:6, noiseMul:1.25, cost:500,  weight:51,  desc:'Balance velocidad/carga'},
+  {id:'auto_compacto',  name:'Auto Compacto',     icon:'🚗', capacity:8,  missions:6, noiseMul:1.30, cost:700,  weight:30,  desc:'Vehículo común'},
+  {id:'pickup',         name:'Camioneta Pickup',  icon:'🛻', capacity:12, missions:7, noiseMul:1.40, cost:1200, weight:12,  desc:'Lootero fuerte'},
+  {id:'furgon_blindado',name:'Furgón Blindado',   icon:'🚐', capacity:16, missions:7, noiseMul:1.55, cost:2000, weight:8,   desc:'Mucha carga, mucho ruido'},
+  {id:'camion_militar', name:'Camión Militar',    icon:'🚛', capacity:24, missions:8, noiseMul:1.80, cost:4000, weight:3,   desc:'Late game / expedición pesada'},
 ];
 const vhById=id=>VEHICLE_CAT.find(v=>v.id===id);
 
@@ -4279,8 +4279,8 @@ function showVictoryModal(){
       }
     }
     if(mtype.id==='vehiculo'){
-      // Give a random vehicle (weighted toward cheaper ones)
-      const pool=VEHICLE_CAT.map((v,i)=>({w:VEHICLE_CAT.length-i,v}));
+      // Give a random vehicle using weights derived from rounded vehicle prices.
+      const pool=VEHICLE_CAT.map(v=>({w:v.weight||1,v}));
       const tv=pool.reduce((s,e)=>s+e.w,0);
       let rv=Math.random()*tv;
       let picked=VEHICLE_CAT[0];
