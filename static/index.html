@@ -345,6 +345,7 @@ const DEFAULT_SAVE={
   weaponAttachments: {},
   ownedAttachments: {},
   armorMods: {},  // {armorUid: [{id,stat,value},...]}  — modifications installed by taller
+  ownedArmorMods: {}, // {modId: count} — armor accessories found as loot, consumed in taller
   loadout: [], // pocket configuration saved between runs [{type,...}|null]
 };
 function normalizeSave(raw){
@@ -359,6 +360,7 @@ function normalizeSave(raw){
   if(!Array.isArray(merged.stash))merged.stash=[];
   if(!Array.isArray(merged.vehicles))merged.vehicles=[];
   if(!Array.isArray(merged.loadout))merged.loadout=[];
+  if(!merged.ownedArmorMods||typeof merged.ownedArmorMods!=='object'||Array.isArray(merged.ownedArmorMods))merged.ownedArmorMods={};
   merged.freeXP=Math.max(0,Math.round(+merged.freeXP||0));
   const legacyXP=Math.max(0,Math.round(+merged.xp||0));
   if(legacyXP>0){
@@ -512,6 +514,8 @@ const ARMOR_MOD_CAT=[
 ];
 
 // Stats secundarios para armaduras drop (no de tienda)
+function armorModById(id){return ARMOR_MOD_CAT.find(m=>m.id===id)||null;}
+
 const SEC_GROUPS=[['xpPctBonus','bpPctBonus'],['speedPctBonus','dmgPctBonus'],['lifePctBonus','bpLootPct'],['itemPct','itemHpPct','itemMpPct']];
 const SEC_LABEL={
   xpBonus:v=>`+${v} XP/kill`,bpBonus:v=>`+${v} BP/kill`,
@@ -1570,7 +1574,7 @@ function renderArmorInv(){
       ${modBadges?`<div class="sec-badges">${modBadges}</div>`:''}
       <div style="font-size:9px;color:#c8a060;margin-top:6px">${'⭐'.repeat(a.stars||1)} — ${armorModSlots(a.stars||1)} ranuras</div>
       ${isEq?'<div class="equipped-tag">⚔ EQUIPADA</div>':`<button class="action-btn" onclick="equipArmor('${a.uid}')">EQUIPAR</button>`}
-      ${a.free?'':`<button class="action-btn" style="font-size:9px;margin-top:4px" onclick="openArmorMods('${a.uid}')">⚙ MEJORAS</button>`}
+      ${a.free?'':`<div style="font-size:8px;color:#5a5248;margin-top:6px;line-height:1.3">Las mejoras se instalan únicamente desde el Taller de Armaduras.</div>`}
     </div>`;
   });
   html+='</div>';
@@ -1610,12 +1614,7 @@ function openArmorMods(uid){
   }
 
   if(freeSlots>0){
-    html+=`<div style="font-size:9px;color:#5a5248;margin-bottom:6px">${freeSlots} ranura${freeSlots>1?'s':''} libre${freeSlots>1?'s':''} — instalar mejora:</div>`;
-    ARMOR_MOD_CAT.forEach(mod=>{
-      const can=save.bp>=mod.cost;
-      html+=`<button class="action-btn" style="font-size:9px;margin-bottom:4px" onclick="installArmorMod('${uid}','${mod.id}')" ${can?'':' disabled'}>
-        ${mod.icon} ${mod.name} — ${mod.cost} BP</button>`;
-    });
+    html+=`<div style="font-size:9px;color:#5a5248;margin-bottom:6px">${freeSlots} ranura${freeSlots>1?'s':''} libre${freeSlots>1?'s':''}. Abrí el Taller de Armaduras para instalar accesorios encontrados como loot.</div>`;
   } else {
     html+=`<div style="font-size:9px;color:#5a3028;margin-top:6px">Todas las ranuras ocupadas.</div>`;
   }
@@ -1628,13 +1627,16 @@ function installArmorMod(uid,modId){
   if(!hasTaller){alert('Necesitás el Taller de Armaduras.');return;}
   const armor=save.ownedArmors.find(a=>a.uid===uid);
   if(!armor)return;
-  const mod=ARMOR_MOD_CAT.find(m=>m.id===modId);if(!mod)return;
-  if(save.bp<mod.cost){alert('BP insuficientes');return;}
+  const mod=armorModById(modId);if(!mod)return;
+  if(!save.ownedArmorMods)save.ownedArmorMods={};
+  const owned=+save.ownedArmorMods[modId]||0;
+  if(owned<=0){alert('No tenés ese accesorio de armadura. Encontralo como loot.');return;}
   const slots=armorModSlots(armor.stars||1);
   if(!save.armorMods)save.armorMods={};
   if(!save.armorMods[uid])save.armorMods[uid]=[];
   if(save.armorMods[uid].length>=slots){alert('Sin ranuras libres');return;}
-  save.bp-=mod.cost;
+  save.ownedArmorMods[modId]=owned-1;
+  if(save.ownedArmorMods[modId]<=0)delete save.ownedArmorMods[modId];
   save.armorMods[uid].push({id:modId,name:mod.name,stat:mod.stat,value:mod.value,icon:mod.icon});
   writeSave();
   // Refresh whichever panel is open
@@ -1645,7 +1647,11 @@ function installArmorMod(uid,modId){
 
 function removeArmorMod(uid,idx){
   if(!save.armorMods||!save.armorMods[uid])return;
-  save.armorMods[uid].splice(idx,1);
+  const removed=save.armorMods[uid].splice(idx,1)[0];
+  if(removed&&removed.id){
+    if(!save.ownedArmorMods)save.ownedArmorMods={};
+    save.ownedArmorMods[removed.id]=(+save.ownedArmorMods[removed.id]||0)+1;
+  }
   writeSave();openArmorMods(uid);
 }
 
@@ -1854,8 +1860,31 @@ function renderWorkshopArmas(el){
 }
 
 // ── Taller de Armaduras: armor mod slots ────────────────────
+function collectArmorModsFromStorage(){
+  if(!save.ownedArmorMods)save.ownedArmorMods={};
+  let moved=0;
+  const pull=(arr)=>{
+    if(!Array.isArray(arr))return arr;
+    return arr.map(item=>{
+      if(item&&item.type==='armor_mod'&&item.modId){
+        save.ownedArmorMods[item.modId]=(+save.ownedArmorMods[item.modId]||0)+1;
+        moved++;
+        return null;
+      }
+      return item;
+    });
+  };
+  save.stash=pull(save.stash).filter(Boolean);
+  save.loadout=pull(save.loadout);
+  if(save.vehicles)save.vehicles.forEach(v=>{if(v&&Array.isArray(v.cargo))v.cargo=pull(v.cargo).filter(Boolean);});
+  if(typeof gs!=='undefined'&&gs&&gs.player&&Array.isArray(gs.player.pockets))gs.player.pockets=pull(gs.player.pockets);
+  if(moved)writeSave();
+  return moved;
+}
+
 function renderWorkshopArmaduras(el){
   el.innerHTML='';
+  collectArmorModsFromStorage();
   const armors=save.ownedArmors||[];
   if(!armors.length){
     el.innerHTML='<div style="font-size:10px;color:#3a3028">No tenés armaduras. Encontralas como drops.</div>';
@@ -1893,11 +1922,12 @@ function renderWorkshopArmaduras(el){
 
     // Install new mod
     if(freeSlots>0){
-      html+=`<div style="font-size:9px;color:#5a5248;margin-bottom:6px">${freeSlots} ranura${freeSlots>1?'s':''} libre${freeSlots>1?'s':''}:</div>`;
+      html+=`<div style="font-size:9px;color:#5a5248;margin-bottom:6px">${freeSlots} ranura${freeSlots>1?'s':''} libre${freeSlots>1?'s':''}. Accesorios disponibles:</div>`;
       ARMOR_MOD_CAT.forEach(mod=>{
-        const can=save.bp>=mod.cost;
+        const qty=(save.ownedArmorMods&&save.ownedArmorMods[mod.id])||0;
+        const can=qty>0;
         html+=`<button class="action-btn" style="font-size:8px;margin-bottom:3px;text-align:left" onclick="installArmorMod('${armor.uid}','${mod.id}');renderWorkshopArmaduras(document.getElementById('workshop-content'))" ${can?'':' disabled'}>
-          ${mod.icon} ${mod.name} <span style="color:#5a5248;font-size:7px">${mod.stat} +${mod.value}</span> — ${mod.cost} BP</button>`;
+          ${mod.icon} ${mod.name} <span style="color:#5a5248;font-size:7px">${mod.stat} +${mod.value}</span> — x${qty}</button>`;
       });
     } else {
       html+=`<div style="font-size:9px;color:#5a3028;margin-top:4px">Todas las ranuras ocupadas.</div>`;
