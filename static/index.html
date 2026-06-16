@@ -1464,8 +1464,8 @@ function renderCharScreen(){
     hdr+='</div>';
     sk.innerHTML=hdr;
     // All skills grouped by element
-    const ELEM_ORDER=['fuego','tierra','agua','aire','luz'];
-    const ELEM_ICONS={fuego:'🔥',tierra:'🪨',agua:'🌊',aire:'💨',luz:'🌟'};
+    const ELEM_ORDER=['fuego','tierra','agua','aire','luz','oscuridad'];
+    const ELEM_ICONS={fuego:'🔥',tierra:'🪨',agua:'🌊',aire:'💨',luz:'🌟',oscuridad:'🕯️'};
     ELEM_ORDER.forEach(elem=>{
       const group=SKILL_GROUPS.find(g=>g[0]&&g[0].element===elem)||[];
       let html=`<div style="margin-bottom:16px;padding:12px;background:#0f0e14;border:1px solid rgba(255,255,255,0.06);border-radius:5px">
