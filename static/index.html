@@ -2680,6 +2680,16 @@ function generateMap(){
   gs.enemies=[];
   gs.cannibalSpawned=false;
   gs.waveCleared=false;
+  const isBossFloor=gs.mtype&&gs.mtype.id==='jefe'&&gs.floor===gs.maxFloors;
+  if(isBossFloor){
+    // Boss missions add an extra final floor dedicated to the boss.
+    // Do not populate this floor with the regular enemy/chest wave, otherwise
+    // clearing the listed floors could immediately end the mission without ever
+    // spawning the boss.
+    gs.waveEnemyCount=1;
+    spawnBoss();
+    return;
+  }
   // Enemy count from mission: floorTiles * density.ratio
   const _count=activeMission&&activeMission.enemyCount?activeMission.enemyCount:8;
   gs.waveEnemyCount=_count;
