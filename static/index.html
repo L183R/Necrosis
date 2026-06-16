@@ -628,6 +628,18 @@ const SKILL_DEF={
     desc:'Buff temporal que aumenta el daño mágico un 30%.',stats:lv=>({magicDmgBonus:0.30,duration:4000+1000*lv})},
   sabiduria:{id:'sabiduria',element:'luz',variant:'D',passive:true,name:'Sabiduría',icon:'📖',maxLevel:99,
     desc:'PASIVA: aumenta la duración de los buffs.',stats:lv=>({buffDurationBonus:0.10*lv})},
+  // OSCURIDAD
+  pozo_sombras:{id:'pozo_sombras',element:'oscuridad',variant:'A',name:'Pozo de Sombras',icon:'🕳️',cast:500,maxLevel:99,
+    mpCost:lv=>Math.min(30,14+lv*0.30),
+    desc:'Crea un círculo oscuro que daña a quien lo toque y se destruye al hacer daño.',stats:lv=>({dmg:10+5*lv,radius:48})},
+  explosion_vacio:{id:'explosion_vacio',element:'oscuridad',variant:'B',name:'Explosión de Vacío',icon:'⚫',cast:650,maxLevel:99,
+    mpCost:lv=>Math.min(38,20+lv*0.35),
+    desc:'Atrae a jugadores, enemigos y gólems a la posición del cursor.',stats:lv=>({radius:170,duration:1500+250*lv,pull:5.5})},
+  ecos_sepulcro:{id:'ecos_sepulcro',element:'oscuridad',variant:'C',name:'Ecos del Sepulcro',icon:'💀',cast:700,maxLevel:99,
+    mpCost:lv=>Math.min(46,26+lv*0.45),
+    desc:'Los enemigos asesinados se vuelven fantasmas y se inmolan contra otro enemigo.',stats:lv=>({dmg:5*lv,radius:54,duration:2100+400*lv,speed:3.8})},
+  pacto_vacio:{id:'pacto_vacio',element:'oscuridad',variant:'D',passive:true,name:'Pacto del Vacío',icon:'🕯️',maxLevel:99,
+    desc:'PASIVA: aumenta el alcance de las magias 10% por nivel y su rango 2% por nivel.',stats:lv=>({rangeBonus:0.10*lv,radiusBonus:0.02*lv})},
 };
 const SKILL_GROUPS=[
   [SKILL_DEF.bola_fuego,SKILL_DEF.lanzallamas,SKILL_DEF.infierno,SKILL_DEF.violencia],
@@ -635,8 +647,9 @@ const SKILL_GROUPS=[
   [SKILL_DEF.curacion,SKILL_DEF.regeneracion,SKILL_DEF.tsunami,SKILL_DEF.dilusion],
   [SKILL_DEF.disparo_aumentado,SKILL_DEF.paralisis,SKILL_DEF.invisibilidad,SKILL_DEF.destreza],
   [SKILL_DEF.rayo_sagrado,SKILL_DEF.destello_luz,SKILL_DEF.panorama_jubilo,SKILL_DEF.sabiduria],
+  [SKILL_DEF.pozo_sombras,SKILL_DEF.explosion_vacio,SKILL_DEF.ecos_sepulcro,SKILL_DEF.pacto_vacio],
 ];
-const ELEMENT_LABELS={fuego:'🔥 Fuego',tierra:'🪨 Tierra',agua:'🌊 Agua',aire:'💨 Aire',luz:'🌟 Luz'};
+const ELEMENT_LABELS={fuego:'🔥 Fuego',tierra:'🪨 Tierra',agua:'🌊 Agua',aire:'💨 Aire',luz:'🌟 Luz',oscuridad:'🕯️ Oscuridad'};
 
 function skillMPCost(sd,lv){
   if(!sd||sd.passive)return 0;
@@ -1341,6 +1354,14 @@ function castTimeMul(){
 function magicDamageMul(){
   const s=gs&&gs.player&&(gs.player.skills||[]).find(x=>x&&x.id==='panorama_jubilo'&&x.active&&Date.now()<x.end);
   return s?1+(s.magicDmgBonus||0):1;
+}
+function voidPactRangeMul(){
+  const lv=(save.skillLevels&&save.skillLevels['pacto_vacio'])||0;
+  return lv>0?1+(SKILL_DEF.pacto_vacio.stats(lv).rangeBonus||0):1;
+}
+function voidPactRadiusMul(){
+  const lv=(save.skillLevels&&save.skillLevels['pacto_vacio'])||0;
+  return lv>0?1+(SKILL_DEF.pacto_vacio.stats(lv).radiusBonus||0):1;
 }
 function isInvisible(){return skillActive('invisibilidad');}
 function ensureStarterArmor(){
@@ -2306,12 +2327,12 @@ function buildSkillInstances(){
     const duration=st.duration?Math.round(st.duration*buffDurationMul()):0;
     const cast=sd.passive?0:Math.max(50,Math.round((sd.cast||500)*castTimeMul()));
     return{id:sid,name:sd.name,icon:sd.icon,cast,mpCost:skillMPCost(sd,lv),
-      lv,dmg:st.dmg||0,radius:st.radius||0,range:st.range||0,
+      lv,dmg:st.dmg||0,radius:st.radius?Math.round(st.radius*voidPactRadiusMul()):0,range:st.range?Math.round(st.range*voidPactRangeMul()):0,
       coneAngle:st.coneAngle||0,duration,
       absorb:st.absorb||0,reflect:st.reflect||0,
       heal:st.heal||0,healPerSec:st.healPerSec||0,
       dmgBonus:st.dmgBonus||0,magicDmgBonus:st.magicDmgBonus||0,stunMs:st.stunMs||0,
-      speed:st.speed||7,bounces:st.bounces||0,hitChance:st.hitChance,
+      speed:st.speed||7,pull:st.pull||0,bounces:st.bounces||0,hitChance:st.hitChance,
       castEnd:0,active:false,end:0,
       regenInterval:0,
     };
@@ -2365,7 +2386,7 @@ function initGame(){
       stats:{...save.stats},
     },
     enemies:[],bullets:[],particles:[],
-    _golems:[],
+    _golems:[],_shadowPits:[],_voidBursts:[],_sepulchralEchoes:[],
     map:[],mapObjects:[],
     spawning:false,
     chests:[],          // chests on the map
@@ -3600,6 +3621,21 @@ function useSkill(idx){
     } else if(_snapSkill.id==='destreza'){
       _sk.active=true;_sk.end=Date.now()+(_snapSkill.duration||6000);
       addLog('Destreza activa');
+    } else if(_snapSkill.id==='pozo_sombras'){
+      gs._shadowPits=gs._shadowPits||[];
+      gs._shadowPits.push({x:_snapWx,y:_snapWy,r:_radius,dmg:_dmg,active:true,createdAt:Date.now()});
+      spawnExplosion(_snapWx,_snapWy,_radius,'#2b003f');
+      addLog(`🕳️ Pozo de sombras (${_dmg} daño)`);
+    } else if(_snapSkill.id==='explosion_vacio'){
+      gs._voidBursts=gs._voidBursts||[];
+      gs._voidBursts.push({x:_snapWx,y:_snapWy,r:_radius,duration:_snapSkill.duration||1500,end:Date.now()+(_snapSkill.duration||1500),pull:_snapSkill.pull||5.5});
+      spawnExplosion(_snapWx,_snapWy,_radius,'#120018');
+      addLog('⚫ Explosión de vacío');
+    } else if(_snapSkill.id==='ecos_sepulcro'){
+      _sk.active=true;_sk.end=Date.now()+(_snapSkill.duration||2500);
+      addLog(`💀 Ecos del sepulcro activos (${_dmg} daño)`);
+    } else if(_snapSkill.id==='pacto_vacio'){
+      addLog('Pacto del Vacío es pasiva — ya activa');
     }
   }, s.cast);
 }
@@ -3630,6 +3666,7 @@ function killEnemy(e){
   const xpGain=Math.round((e.xp+(sec.xpBonus||0))*_xpMul);
   const bpGain=Math.round((e.bp+(sec.bpBonus||0))*_bpMul);
   p.freeXP+=xpGain;p.bp+=bpGain;
+  triggerSepulchralEcho(e);
   spawnExplosion(e.x+e.size/2,e.y+e.size/2,18,e.color);
   addLog(`+${xpGain} XP  +${bpGain} BP — ${e.name}`);
   gs.enemies=gs.enemies.filter(x=>x!==e);
@@ -3640,6 +3677,20 @@ function killEnemy(e){
     if(gs.exitDoor)gs.exitDoor.open=true;
     addLog('🚪 Zona despejada — avanzá al siguiente piso');
   }
+}
+
+function triggerSepulchralEcho(e){
+  if(!gs||!gs.player||!gs.player.skills)return;
+  const eco=gs.player.skills.find(s=>s&&s.id==='ecos_sepulcro'&&s.active&&Date.now()<s.end);
+  if(!eco)return;
+  const target=gs.enemies.find(x=>x!==e&&x.hp>0);
+  if(!target)return;
+  gs._sepulchralEchoes=gs._sepulchralEchoes||[];
+  gs._sepulchralEchoes.push({
+    x:e.x+e.size/2,y:e.y+e.size/2,
+    target,dmg:eco.dmg||0,radius:eco.radius||54,
+    speed:eco.speed||3.8,life:2200,
+  });
 }
 
 function spawnBoss(){
@@ -3667,7 +3718,7 @@ function nextFloor(){
   }
   gs.floor++;gs.wave=1;generateMap();
   const ns=findFreePos(28,3,3);gs.player.x=ns.x;gs.player.y=ns.y;
-  gs.bullets=[];gs._golems=[]; // clear projectiles/summons; enemies already set by generateMap
+  gs.bullets=[];gs._golems=[];gs._shadowPits=[];gs._voidBursts=[];gs._sepulchralEchoes=[]; // clear projectiles/summons; enemies already set by generateMap
   document.getElementById('floor-num').textContent=gs.floor;
   document.getElementById('floor-max').textContent=gs.maxFloors;
 
@@ -4041,6 +4092,88 @@ function drawGolems(){
   }
 }
 
+function pullEntityToward(entity,cx,cy,pull,ignoreWalls){
+  const ex=entity.x+(entity.w||entity.size||24)/2,ey=entity.y+(entity.h||entity.size||24)/2;
+  const dx=cx-ex,dy=cy-ey,dist=Math.hypot(dx,dy)||1;
+  if(dist<3)return;
+  const step=Math.min(pull,dist);
+  const nx=entity.x+(dx/dist)*step,ny=entity.y+(dy/dist)*step;
+  const ew=entity.w||entity.size||24,eh=entity.h||entity.size||24;
+  if(ignoreWalls){entity.x=nx;entity.y=ny;return;}
+  if(!isWall(nx+2,entity.y+2,true)&&!isWall(nx+ew-2,entity.y+2,true)&&!isWall(nx+2,entity.y+eh-2,true)&&!isWall(nx+ew-2,entity.y+eh-2,true))entity.x=nx;
+  if(!isWall(entity.x+2,ny+2,true)&&!isWall(entity.x+ew-2,ny+2,true)&&!isWall(entity.x+2,ny+eh-2,true)&&!isWall(entity.x+ew-2,ny+eh-2,true))entity.y=ny;
+}
+
+function updateShadowMagic(now){
+  if(!gs)return;
+  gs._shadowPits=gs._shadowPits||[];
+  for(let i=gs._shadowPits.length-1;i>=0;i--){
+    const pit=gs._shadowPits[i];
+    if(!pit||!pit.active){gs._shadowPits.splice(i,1);continue;}
+    let triggered=false;
+    for(const e of [...gs.enemies]){
+      if(Math.hypot(e.x+e.size/2-pit.x,e.y+e.size/2-pit.y)<pit.r+e.size/2){damageEnemy(e,pit.dmg,false);triggered=true;}
+    }
+    const p=gs.player;
+    if(Math.hypot(p.x+p.w/2-pit.x,p.y+p.h/2-pit.y)<pit.r+p.w/2&&p.invTime<now){
+      p.hp-=pit.dmg;p.invTime=now+500;spawnDmgNumber(p.x+p.w/2,p.y,pit.dmg,true);triggered=true;
+      if(p.hp<=0){gs.gameOver=true;persistRunProgress();}
+    }
+    for(const g of (gs._golems||[])){
+      if(!g||!g.active)continue;
+      if(Math.hypot(g.x+g.size/2-pit.x,g.y+g.size/2-pit.y)<pit.r+g.size/2){
+        g.hp-=pit.dmg;spawnDmgNumber(g.x+g.size/2,g.y,pit.dmg,true);triggered=true;
+        if(g.hp<=0){g.active=false;spawnExplosion(g.x+12,g.y+12,34,'#8B6914');}
+      }
+    }
+    if(triggered){spawnExplosion(pit.x,pit.y,pit.r,'#2b003f');gs._shadowPits.splice(i,1);}
+  }
+
+  gs._voidBursts=gs._voidBursts||[];
+  for(let i=gs._voidBursts.length-1;i>=0;i--){
+    const v=gs._voidBursts[i];
+    if(!v||now>=v.end){gs._voidBursts.splice(i,1);continue;}
+    const pulse=0.65+0.35*Math.sin(now*0.02);
+    for(const e of gs.enemies)if(Math.hypot(e.x+e.size/2-v.x,e.y+e.size/2-v.y)<v.r)pullEntityToward(e,v.x,v.y,v.pull*pulse,true);
+    for(const g of (gs._golems||[]))if(g&&g.active&&Math.hypot(g.x+g.size/2-v.x,g.y+g.size/2-v.y)<v.r)pullEntityToward(g,v.x,v.y,v.pull*pulse,true);
+    if(Math.hypot(gs.player.x+gs.player.w/2-v.x,gs.player.y+gs.player.h/2-v.y)<v.r)pullEntityToward(gs.player,v.x,v.y,v.pull*0.75*pulse,false);
+  }
+
+  gs._sepulchralEchoes=gs._sepulchralEchoes||[];
+  for(let i=gs._sepulchralEchoes.length-1;i>=0;i--){
+    const ec=gs._sepulchralEchoes[i];
+    ec.life-=16;
+    if(!ec.target||!gs.enemies.includes(ec.target)||ec.life<=0){gs._sepulchralEchoes.splice(i,1);continue;}
+    const tx=ec.target.x+ec.target.size/2,ty=ec.target.y+ec.target.size/2;
+    const dx=tx-ec.x,dy=ty-ec.y,dist=Math.hypot(dx,dy)||1;
+    ec.x+=(dx/dist)*ec.speed;ec.y+=(dy/dist)*ec.speed;
+    if(dist<ec.target.size/2+8){
+      spawnExplosion(ec.x,ec.y,ec.radius,'#6b1b8f');
+      for(const e of [...gs.enemies])if(Math.hypot(e.x+e.size/2-ec.x,e.y+e.size/2-ec.y)<ec.radius)damageEnemy(e,ec.dmg,false);
+      gs._sepulchralEchoes.splice(i,1);
+    }
+  }
+}
+
+function drawShadowMagic(){
+  if(!gs)return;
+  const now=Date.now();
+  for(const pit of (gs._shadowPits||[])){
+    ctx.save();ctx.globalAlpha=0.42+0.12*Math.sin(now*0.008);
+    ctx.beginPath();ctx.arc(pit.x,pit.y,pit.r,0,Math.PI*2);ctx.fillStyle='#1a0026';ctx.fill();
+    ctx.strokeStyle='#7a2bbd';ctx.lineWidth=2;ctx.stroke();ctx.restore();
+  }
+  for(const v of (gs._voidBursts||[])){
+    const left=Math.max(0,(v.end-now)/v.duration);
+    ctx.save();ctx.globalAlpha=0.25+0.35*left;
+    ctx.beginPath();ctx.arc(v.x,v.y,v.r*(1-left*0.25),0,Math.PI*2);ctx.strokeStyle='#7d35ff';ctx.lineWidth=4;ctx.stroke();
+    ctx.beginPath();ctx.arc(v.x,v.y,10+10*Math.sin(now*0.02),0,Math.PI*2);ctx.fillStyle='#08000f';ctx.fill();ctx.restore();
+  }
+  for(const ec of (gs._sepulchralEchoes||[])){
+    ctx.save();ctx.globalAlpha=0.72;ctx.font='20px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('👻',ec.x,ec.y);ctx.restore();
+  }
+}
+
 function update(dt){
   const p=gs.player,now=Date.now();
   let dx=0,dy=0;
@@ -4114,6 +4247,7 @@ function update(dt){
     if(p.x+p.w>d.x-8){openChestModal();}
   }
   updateGolems(now);
+  updateShadowMagic(now);
   // Enemies
   // Noise: player adds noise when shooting or moving fast
   const shotNoise=(now-(gs.lastShotTime||0)<500)?(gs.lastShotRadius||0):0;
@@ -4264,6 +4398,7 @@ function draw(){
   }
   // Allied summons
   drawGolems();
+  drawShadowMagic();
 
   // Particles
   for(const pt of gs.particles){
