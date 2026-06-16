@@ -12,7 +12,9 @@ canvas{display:block;position:fixed;inset:0}
 .screen.hidden{display:none!important}
 #screen-menu{background:#0a0a0f}
 #menu-title{font-size:58px;letter-spacing:12px;color:#c0392b;text-transform:uppercase;text-shadow:0 0 40px rgba(192,57,43,0.45);margin-bottom:6px}
-#menu-sub{font-size:10px;letter-spacing:5px;color:#3a3028;margin-bottom:52px}
+#menu-resources{display:flex;gap:22px;align-items:center;justify-content:center;margin-bottom:10px;font-size:11px;letter-spacing:3px;color:#8a7e6e;text-transform:uppercase}
+.menu-resource-val{color:#f0e6d0;font-weight:bold}
+#menu-sub{font-size:10px;letter-spacing:5px;color:#3a3028;margin-bottom:42px}
 .menu-btn{padding:13px 52px;border:1px solid rgba(255,255,255,0.14);background:transparent;color:#c8bfa8;font-family:'Courier New',monospace;font-size:12px;letter-spacing:4px;cursor:pointer;text-transform:uppercase;transition:all 0.18s;margin:5px;min-width:240px}
 .menu-btn:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.3);color:#f0e6d0}
 #menu-save-info{margin-top:28px;font-size:10px;letter-spacing:2px;color:#3a3028}
@@ -149,6 +151,7 @@ canvas{display:block;position:fixed;inset:0}
 <!-- MAIN MENU -->
 <div class="screen" id="screen-menu">
   <div id="menu-title">NECROSIS</div>
+  <div id="menu-resources"><span>BP <span class="menu-resource-val" id="menu-bp-disp">0</span></span><span>XP <span class="menu-resource-val" id="menu-xp-disp">0</span></span></div>
   <div id="menu-sub">SURVIVAL RPG</div>
   <button class="menu-btn" onclick="playVehicleIntroAndShowMission()">▶ JUGAR</button>
   <button class="menu-btn" onclick="showScreen('char')">◈ PERSONAJE</button>
@@ -1367,8 +1370,10 @@ function showScreen(name){
 }
 function updateMenuInfo(){
   const s=save;
+  document.getElementById('menu-bp-disp').textContent=s.bp;
+  document.getElementById('menu-xp-disp').textContent=s.freeXP;
   document.getElementById('menu-save-info').textContent=
-    s.level>1?`Nivel ${s.level}  •  ${s.bp} BP  •  Piso más alto: ${s.highestFloor}`:'Sin partida guardada';
+    s.level>1?`Nivel ${s.level}  •  ${s.bp} BP  •  ${s.freeXP} XP  •  Piso más alto: ${s.highestFloor}`:'Sin partida guardada';
 }
 
 // ═══════════════════════════════════════════════════════════
