@@ -20,7 +20,7 @@ canvas{display:block;position:fixed;inset:0}
 #vehicle-intro.hidden{display:none!important}
 #vehicle-intro-road{position:absolute;left:0;right:0;top:55%;height:86px;background:linear-gradient(to bottom,#111,#1c1a18 45%,#0d0d10);border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08)}
 #vehicle-intro-road:after{content:'';position:absolute;left:0;right:0;top:41px;height:3px;background:repeating-linear-gradient(to right,rgba(240,230,208,0.15) 0 46px,transparent 46px 86px)}
-#vehicle-intro-car{position:absolute;top:calc(55% - 24px);left:-150px;font-size:56px;filter:drop-shadow(0 10px 12px rgba(0,0,0,0.75));animation:vehicle-drive 3s cubic-bezier(.18,.82,.22,1) forwards}
+#vehicle-intro-car{position:absolute;top:calc(55% - 24px);left:-150px;font-size:56px;filter:drop-shadow(0 10px 12px rgba(0,0,0,0.75));animation:vehicle-drive 5s cubic-bezier(.18,.82,.22,1) forwards}
 #vehicle-intro-label{position:absolute;top:35%;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:4px;color:#7a6e5e;text-align:center;text-transform:uppercase}
 #vehicle-intro-name{display:block;margin-top:8px;font-size:18px;letter-spacing:5px;color:#c8bfa8}
 @keyframes vehicle-drive{0%{transform:translateX(0) scale(0.92)}12%{transform:translateX(14vw) scale(1)}82%{transform:translateX(calc(100vw + 120px)) scale(1)}100%{transform:translateX(calc(100vw + 220px)) scale(0.96)}}
@@ -143,7 +143,7 @@ canvas{display:block;position:fixed;inset:0}
 <div id="vehicle-intro" class="hidden">
   <div id="vehicle-intro-label">Preparando expedición<span id="vehicle-intro-name"></span></div>
   <div id="vehicle-intro-road"></div>
-  <div id="vehicle-intro-car">🚗</div>
+  <div id="vehicle-intro-car">🧍</div>
 </div>
 
 <!-- MAIN MENU -->
@@ -735,14 +735,13 @@ function playVehicleIntroAndShowMission(){
   const overlay=document.getElementById('vehicle-intro');
   const car=document.getElementById('vehicle-intro-car');
   const name=document.getElementById('vehicle-intro-name');
-  const v=vhById(save.equippedVehicle)||vhById('bicicleta')||{icon:'🚗',name:'Vehículo'};
-  name.textContent=v.name;
-  car.textContent=v.icon||'🚗';
+  name.textContent='Superviviente';
+  car.textContent='🧍';
   car.style.animation='none';
   void car.offsetWidth;
-  car.style.animation='vehicle-drive 3s cubic-bezier(.18,.82,.22,1) forwards';
+  car.style.animation='vehicle-drive 5s cubic-bezier(.18,.82,.22,1) forwards';
   overlay.classList.remove('hidden');
-  setTimeout(()=>{overlay.classList.add('hidden');showScreen('mission');},3000);
+  setTimeout(()=>{overlay.classList.add('hidden');showScreen('mission');},5000);
 }
 
 function renderMissionSelect(){
