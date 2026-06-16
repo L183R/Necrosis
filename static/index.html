@@ -3282,14 +3282,16 @@ function announceCannibal(){
   if(hint){hint.style.opacity='1';hint.textContent='⚠ CANÍBAL DETECTADO — DEVORA A OTROS ENEMIGOS';}
 }
 
-function findCannibalPrey(cannibal){
-  let prey=null,best=Infinity;
+function findCannibalTarget(cannibal){
+  if(!gs)return null;
+  const cx=cannibal.x+cannibal.size/2,cy=cannibal.y+cannibal.size/2;
+  let target={type:'player',entity:gs.player,dist:Math.hypot(gs.player.x+gs.player.w/2-cx,gs.player.y+gs.player.h/2-cy)};
   for(const other of gs.enemies){
     if(other===cannibal||other.isBoss)continue;
-    const dist=Math.hypot(other.x+other.size/2-cannibal.x-cannibal.size/2,other.y+other.size/2-cannibal.y-cannibal.size/2);
-    if(dist<best){best=dist;prey=other;}
+    const dist=Math.hypot(other.x+other.size/2-cx,other.y+other.size/2-cy);
+    if(dist<target.dist)target={type:'enemy',entity:other,dist};
   }
-  return prey?{prey,dist:best}:null;
+  return target;
 }
 
 function cannibalConsumeEnemy(cannibal,prey){
@@ -3300,6 +3302,7 @@ function cannibalConsumeEnemy(cannibal,prey){
   cannibal.maxHp+=prey.maxHp||prey.hp||0;
   cannibal.hp+=Math.max(0,prey.hp||0);
   cannibal.dmg+=prey.dmg||0;
+  cannibal.xp=(cannibal.xp||0)+(prey.xp||0);
   cannibal.x+=prey.size*0.08;
   cannibal.y+=prey.size*0.08;
   spawnExplosion(prey.x+prey.size/2,prey.y+prey.size/2,22,prey.color);
@@ -4261,15 +4264,17 @@ function update(dt){
     let px=p.x+p.w/2,py=p.y+p.h/2,ex=e.x+e.size/2,ey=e.y+e.size/2;
     let cannibalPrey=null;
     if(e.isCannibal){
-      const foundPrey=findCannibalPrey(e);
-      if(foundPrey){
-        cannibalPrey=foundPrey.prey;
-        px=cannibalPrey.x+cannibalPrey.size/2;py=cannibalPrey.y+cannibalPrey.size/2;
+      const foundTarget=findCannibalTarget(e);
+      if(foundTarget){
+        if(foundTarget.type==='enemy'){
+          cannibalPrey=foundTarget.entity;
+          px=cannibalPrey.x+cannibalPrey.size/2;py=cannibalPrey.y+cannibalPrey.size/2;
+        }
         e.alerted=true;
       }
     }
     let targetGolem=null,targetGolemDist=Infinity;
-    if(!cannibalPrey)for(const g of (gs._golems||[])){
+    if(!e.isCannibal&&!cannibalPrey)for(const g of (gs._golems||[])){
       if(!g||!g.active)continue;
       const gd=Math.hypot(g.x+g.size/2-ex,g.y+g.size/2-ey);
       if(gd<targetGolemDist){targetGolem=g;targetGolemDist=gd;}
@@ -4281,14 +4286,14 @@ function update(dt){
     // El gólem atrae a los enemigos hacia él y toma prioridad sobre el jugador.
     const effectiveDetect=e.detect+playerNoise;
     if(targetGolem){e.alerted=true;}
-    else if(invisible){e.alerted=false;}
+    else if(invisible&&!e.isCannibal){e.alerted=false;}
     else if(!e.alerted&&(dist<effectiveDetect||e.screenDetect)) e.alerted=true;
     if(e.alerted&&e.packAura){
       for(const ally of gs.enemies){
         if(ally!==e&&!ally.alerted&&Math.hypot(ally.x+ally.size/2-ex,ally.y+ally.size/2-ey)<e.packAura)ally.alerted=true;
       }
     }
-    if(e.alerted&&dist>500&&!targetGolem) e.alerted=false; // lose track
+    if(e.alerted&&dist>500&&!targetGolem&&!e.isCannibal) e.alerted=false; // lose track
     if(e.alerted){
       e.angle=Math.atan2(edy,edx);
       if(dist>1){const mvx=(edx/dist)*e.speed,mvy=(edy/dist)*e.speed,enx=e.x+mvx,eny=e.y+mvy;
