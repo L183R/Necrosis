@@ -695,7 +695,7 @@ const MISSION_TYPES=[
   {id:'vehiculo',   name:'Vehículo',   icon:'🚙', desc:'Sin cofres. Al final hay un vehículo abandonado.',      color:'#e65100', bc:'rgba(230,81,0,0.4)',   chestMul:0,    enemyMul:1.0},
   {id:'defensa',    name:'Defensa',    icon:'🛡️', desc:'Aguantá la posición: la puerta tarda en liberarse.',    color:'#5e35b1', bc:'rgba(94,53,177,0.4)',   chestMul:0.75, enemyMul:1.35},
   {id:'purga',      name:'Purga',      icon:'☣️', desc:'Zona infestada. Eliminá focos densos de infección.',    color:'#558b2f', bc:'rgba(85,139,47,0.4)',   chestMul:0.85, enemyMul:1.45},
-  {id:'horda',      name:'Horda',      icon:'🧟', desc:'Oleada masiva con pocos recursos.',                    color:'#c62828', bc:'rgba(198,40,40,0.4)',   chestMul:0.35, enemyMul:2.25},
+  {id:'horda',      name:'Horda',      icon:'🧟', desc:'Oleada masiva con pocos recursos.',                    color:'#c62828', bc:'rgba(198,40,40,0.4)',   chestMul:0.35, enemyMul:3.5},
   {id:'cuarentena', name:'Cuarentena', icon:'⏱️', desc:'La zona se vuelve tóxica si tardás demasiado.',          color:'#f9a825', bc:'rgba(249,168,37,0.4)',  chestMul:0.9,  enemyMul:1.25},
   {id:'apagon',     name:'Apagón',     icon:'🔦', desc:'Visibilidad reducida. Peleá dentro de tu cono de luz.', color:'#263238', bc:'rgba(96,125,139,0.45)', chestMul:1.05, enemyMul:1.15},
   {id:'incursion',  name:'Incursión',  icon:'🗺️', desc:'Corrida más larga con recompensas acumuladas.',         color:'#6d4c41', bc:'rgba(109,76,65,0.4)',   chestMul:1.25, enemyMul:1.15},
@@ -2407,7 +2407,7 @@ function initGame(){
     waveCleared:false,
     keys:{},mouseX:W/2,mouseY:H/2,
     tick:0,gameOver:false,paused:false,countdownUntil:0,countdownStarted:0,lastShotRadius:0,lastShotTime:0,
-    _defenseUntil:0,_quarantineDeadline:0,_quarantineLastDmg:0,
+    _defenseUntil:0,_defenseTargetCount:0,_quarantineDeadline:0,_quarantineLastDmg:0,_purgePortals:[],
   };
   applyDefaultAtts();
   generateMap();
@@ -3287,13 +3287,22 @@ function makeEnemy(t,pos,overrides={}){
     attackCd:0,stunTime:0,angle:0,wobble:Math.random()*Math.PI*2,
     detect:overrides.detect??detect,alerted:overrides.alerted??false,idleAngle:Math.random()*Math.PI*2,idleTimer:0};
 }
-function spawnEnemy(type){
-  const isCannibal=Math.random()<CANNIBAL_SPAWN_CHANCE;
+function spawnEnemy(type,opts={}){
+  const isCannibal=!opts.noCannibal&&Math.random()<CANNIBAL_SPAWN_CHANCE;
   const t=isCannibal?CANNIBAL_TYPE:ENEMY_TYPES[type];
-  // Spawn anywhere free in the map, far from player
-  const pos=findFreePos(t.size);
+  const pos=opts.pos||findSpawnPosFarFromPlayer(t.size,opts.minPlayerDist||0);
   gs.enemies.push(makeEnemy(t,pos,isCannibal?{isCannibal:true,speed:CANNIBAL_SPEED,detect:Infinity,alerted:true}:{}));
   if(isCannibal)announceCannibal();
+}
+
+function findSpawnPosFarFromPlayer(size,minDist=0){
+  if(!gs||!gs.player||minDist<=0)return findFreePos(size);
+  const pcx=gs.player.x+gs.player.w/2,pcy=gs.player.y+gs.player.h/2;
+  for(let i=0;i<120;i++){
+    const pos=findFreePos(size);
+    if(Math.hypot(pos.x+size/2-pcx,pos.y+size/2-pcy)>=minDist)return pos;
+  }
+  return findFreePos(size);
 }
 
 const CANNIBAL_TYPE={name:'Caníbal',color:'#3b1111',eyeColor:'#ffd0a0',hp:90,dmg:14,speed:CANNIBAL_SPEED,xp:120,bp:90,size:26,isCannibal:true,screenDetect:true};
@@ -3360,16 +3369,66 @@ function spawnWave(){
   if(gs.exitDoor)gs.exitDoor.open=false;
   const mt=gs.mtype&&gs.mtype.id;
   gs._defenseUntil=mt==='defensa'?Date.now()+45000:0;
+  gs._defenseTargetCount=mt==='defensa'?(gs.waveEnemyCount||gs.enemies.length):0;
+  if(mt==='purga')spawnPurgePortals();
+  else gs._purgePortals=[];
   gs._quarantineDeadline=mt==='cuarentena'?Date.now()+60000:0;
   gs._quarantineLastDmg=0;
   const _scName=gs._scenario?gs._scenario.icon+' '+gs._scenario.name:'';
-  const _special=mt==='defensa'?' — resistí 45s':mt==='cuarentena'?' — cuarentena en 60s':mt==='apagon'?' — visibilidad reducida':mt==='incursion'?' — incursión extendida':'';
+  const _special=mt==='defensa'?' — resistí 45s':mt==='purga'?' — destruí 3 portales':mt==='cuarentena'?' — cuarentena en 60s':mt==='apagon'?' — visibilidad reducida':mt==='incursion'?' — incursión extendida':'';
   showBanner('wave-banner',`Piso ${gs.floor} — ${_scName} — ${gs.waveEnemyCount||'?'} enemigos${_special}`);
+}
+
+
+function spawnDefenseReplacement(){
+  const target=gs._defenseTargetCount||gs.waveEnemyCount||0;
+  if(!target||gs.enemies.length>=target)return;
+  const _maxT=Math.min(ENEMY_TYPES.length-1,Math.floor((gs?gs.floor:1)/2)+1);
+  spawnEnemy(Math.floor(Math.random()*(_maxT+1)),{minPlayerDist:360});
+}
+
+function spawnPurgePortals(){
+  gs._purgePortals=[];
+  for(let i=0;i<3;i++){
+    const pos=findSpawnPosFarFromPlayer(34,220);
+    gs._purgePortals.push({x:pos.x,y:pos.y,size:34,hp:500,maxHp:500,active:true,lastSpawn:Date.now()+i*1200});
+  }
+  addLog('☣️ Purga: destruí los 3 portales de infección');
+}
+
+function updatePurgePortals(now){
+  if(!gs||!(gs.mtype&&gs.mtype.id==='purga'))return;
+  for(const portal of (gs._purgePortals||[])){
+    if(!portal.active)continue;
+    if(now-(portal.lastSpawn||0)>=8000){
+      portal.lastSpawn=now;
+      const _maxT=Math.min(ENEMY_TYPES.length-1,Math.floor((gs?gs.floor:1)/2)+1);
+      const pos=findFreePos(24,Math.floor((portal.x+portal.size/2)/TILE),Math.floor((portal.y+portal.size/2)/TILE));
+      spawnEnemy(Math.floor(Math.random()*(_maxT+1)),{pos,noCannibal:true});
+      spawnExplosion(portal.x+portal.size/2,portal.y+portal.size/2,24,'#66bb44');
+      addLog('☣️ Un portal escupe infectados');
+    }
+  }
+}
+
+function damagePurgePortal(portal,dmg){
+  if(!portal||!portal.active)return;
+  breakInvisibilityOnEnemyDamage();
+  portal.hp-=dmg;
+  spawnDmgNumber(portal.x+portal.size/2,portal.y,dmg,false);
+  spawnBloodParticles(portal.x+portal.size/2,portal.y+portal.size/2,'#66bb44');
+  if(portal.hp<=0){
+    portal.active=false;
+    spawnExplosion(portal.x+portal.size/2,portal.y+portal.size/2,42,'#66bb44');
+    addLog('☣️ Portal purgado');
+    tryOpenClearedExit();
+  }
 }
 
 function canOpenExitForMission(){
   if(!gs)return false;
   if(gs.mtype&&gs.mtype.id==='defensa')return Date.now()>=(gs._defenseUntil||0);
+  if(gs.mtype&&gs.mtype.id==='purga')return !(gs._purgePortals||[]).some(p=>p&&p.active);
   return true;
 }
 
@@ -3503,10 +3562,17 @@ function tryAttack(){
   if(w.type==='melee'){
     ws.lastUsed=now;
     const _as=armorStats();
+    const meleeDmg=()=>Math.round(w.dmg*(0.85+Math.random()*0.3)*(1+p.stats.str*0.025)*violenceDamageMul()*(1+(_as.dmgPctBonus||0)/100));
     for(const e of gs.enemies){
       const ex=e.x+e.size/2,ey=e.y+e.size/2;
       if(Math.hypot(ex-(p.x+p.w/2),ey-(p.y+p.h/2))<w.range&&Math.abs(normA(Math.atan2(ey-(p.y+p.h/2),ex-(p.x+p.w/2))-angle))<Math.PI/2.2)
-        {damageEnemy(e,Math.round(w.dmg*(0.85+Math.random()*0.3)*(1+p.stats.str*0.025)*violenceDamageMul()*(1+(_as.dmgPctBonus||0)/100)),true);}
+        {damageEnemy(e,meleeDmg(),true);}
+    }
+    for(const portal of (gs._purgePortals||[])){
+      if(!portal.active)continue;
+      const px=portal.x+portal.size/2,py=portal.y+portal.size/2;
+      if(Math.hypot(px-(p.x+p.w/2),py-(p.y+p.h/2))<w.range&&Math.abs(normA(Math.atan2(py-(p.y+p.h/2),px-(p.x+p.w/2))-angle))<Math.PI/2.2)
+        damagePurgePortal(portal,meleeDmg());
     }
     spawnMeleeEffect(p.x+p.w/2,p.y+p.h/2,angle);
     return;
@@ -3716,6 +3782,7 @@ function killEnemy(e){
   spawnExplosion(e.x+e.size/2,e.y+e.size/2,18,e.color);
   addLog(`+${xpGain} XP  +${bpGain} BP — ${e.name}`);
   gs.enemies=gs.enemies.filter(x=>x!==e);
+  if(gs.mtype&&gs.mtype.id==='defensa'&&Date.now()<(gs._defenseUntil||0))spawnDefenseReplacement();
   if(e.splitOnDeath)spawnSplitWalkers(e);
   persistRunProgress();
   tryOpenClearedExit();
@@ -4076,6 +4143,7 @@ function gameLoop(ts){
   if(isCountdownActive()){draw();updateHUD();return;}
   if(gs.countdownUntil){gs.countdownUntil=0;const hint=document.getElementById('countdown-hint');if(hint)hint.style.opacity='0';}
   updateMissionHazards(dt);
+  updatePurgePortals(Date.now());
   update(dt);draw();updateHUD();
 }
 
@@ -4422,6 +4490,15 @@ function update(dt){
         spawnExplosion(b.x,b.y,12,'#fff6a0');
       } else hit=true;
     }
+    if(!hit)for(const portal of (gs._purgePortals||[])){
+      if(!portal.active)continue;
+      if(Math.hypot(b.x-portal.x-portal.size/2,b.y-portal.y-portal.size/2)<portal.size/2+b.r){
+        damagePurgePortal(portal,b.dmg);
+        if(b.explosive){const er=b.explodeRadius||60;spawnExplosion(b.x,b.y,er,'#ff6000');for(const ptl of (gs._purgePortals||[]))if(ptl.active&&Math.hypot(b.x-ptl.x-ptl.size/2,b.y-ptl.y-ptl.size/2)<er)damagePurgePortal(ptl,Math.round(b.dmg*0.5));}
+        if(!b.pierce)hit=true;
+        break;
+      }
+    }
     if(!hit)for(let j=gs.enemies.length-1;j>=0;j--){const e=gs.enemies[j];
       if(Math.hypot(b.x-e.x-e.size/2,b.y-e.y-e.size/2)<e.size/2+b.r){
         if(!b.hitEnemies||!b.hitEnemies.includes(e)){
@@ -4468,6 +4545,19 @@ function draw(){
   }
   // Map objects
   for(const o of gs.mapObjects){ctx.fillStyle=o.type==='crate'?'#5a4530':'#3a3a50';ctx.fillRect(o.x,o.y,28,28);ctx.fillStyle=o.type==='crate'?'#4a3520':'#2a2a40';ctx.fillRect(o.x+2,o.y+2,24,24);ctx.fillStyle=o.type==='crate'?'#8a6540':'#5a5a80';ctx.fillRect(o.x+8,o.y+12,12,2);ctx.fillRect(o.x+13,o.y+7,2,12);}
+  // Purge portals
+  for(const portal of (gs._purgePortals||[])){
+    if(!portal.active)continue;
+    const now=Date.now(),pct=Math.max(0,portal.hp/portal.maxHp);
+    ctx.save();ctx.translate(portal.x+portal.size/2,portal.y+portal.size/2);
+    ctx.rotate(now*0.0015);
+    ctx.fillStyle=`rgba(70,160,50,${0.35+Math.sin(now*0.006)*0.12})`;ctx.beginPath();ctx.arc(0,0,portal.size*0.62,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#76d64f';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,portal.size*0.44,0,Math.PI*2);ctx.stroke();
+    ctx.rotate(-now*0.003);ctx.fillStyle='#24441f';ctx.fillRect(-portal.size*0.22,-portal.size*0.22,portal.size*0.44,portal.size*0.44);
+    ctx.restore();
+    ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(portal.x-2,portal.y-9,portal.size+4,5);
+    ctx.fillStyle=pct>0.5?'#66bb44':pct>0.25?'#c8a020':'#c03020';ctx.fillRect(portal.x,portal.y-8,portal.size*pct,3);
+  }
   // Chests
   for(const c of gs.chests){
     const now=Date.now();ctx.save();ctx.translate(c.x+12,c.y+12);
