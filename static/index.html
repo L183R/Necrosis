@@ -689,10 +689,16 @@ let _generatedMissions=[];
 // MISSION TYPES
 // ═══════════════════════════════════════════════════════════
 const MISSION_TYPES=[
-  {id:'saqueo',   name:'Saqueo',    icon:'📦', desc:'Zona llena de recursos. Más cofres.',            color:'#2e7d32', bc:'rgba(46,125,50,0.4)',   chestMul:1.5, enemyMul:1.0},
-  {id:'rescate',  name:'Rescate',   icon:'🧍', desc:'Sobreviviente atrapado. Protegelo hasta el final.', color:'#1565c0', bc:'rgba(21,101,192,0.4)',  chestMul:1.0, enemyMul:1.1},
-  {id:'jefe',     name:'Jefe',      icon:'💀', desc:'Se añade un piso extra con un enemigo jefe.',   color:'#b71c1c', bc:'rgba(183,28,28,0.4)',  chestMul:1.0, enemyMul:1.2},
-  {id:'vehiculo', name:'Vehículo',  icon:'🚙', desc:'Sin cofres. Al final hay un vehículo abandonado.', color:'#e65100', bc:'rgba(230,81,0,0.4)',   chestMul:0,   enemyMul:1.0},
+  {id:'saqueo',     name:'Saqueo',     icon:'📦', desc:'Zona llena de recursos. Más cofres.',                  color:'#2e7d32', bc:'rgba(46,125,50,0.4)',   chestMul:1.5,  enemyMul:1.0},
+  {id:'rescate',    name:'Rescate',    icon:'🧍', desc:'Sobreviviente atrapado. Protegelo hasta el final.',     color:'#1565c0', bc:'rgba(21,101,192,0.4)',  chestMul:1.0,  enemyMul:1.1},
+  {id:'jefe',       name:'Jefe',       icon:'💀', desc:'Se añade un piso extra con un enemigo jefe.',           color:'#b71c1c', bc:'rgba(183,28,28,0.4)',  chestMul:1.0,  enemyMul:1.2},
+  {id:'vehiculo',   name:'Vehículo',   icon:'🚙', desc:'Sin cofres. Al final hay un vehículo abandonado.',      color:'#e65100', bc:'rgba(230,81,0,0.4)',   chestMul:0,    enemyMul:1.0},
+  {id:'defensa',    name:'Defensa',    icon:'🛡️', desc:'Aguantá la posición: la puerta tarda en liberarse.',    color:'#5e35b1', bc:'rgba(94,53,177,0.4)',   chestMul:0.75, enemyMul:1.35},
+  {id:'purga',      name:'Purga',      icon:'☣️', desc:'Zona infestada. Eliminá focos densos de infección.',    color:'#558b2f', bc:'rgba(85,139,47,0.4)',   chestMul:0.85, enemyMul:1.45},
+  {id:'horda',      name:'Horda',      icon:'🧟', desc:'Oleada masiva con pocos recursos.',                    color:'#c62828', bc:'rgba(198,40,40,0.4)',   chestMul:0.35, enemyMul:2.25},
+  {id:'cuarentena', name:'Cuarentena', icon:'⏱️', desc:'La zona se vuelve tóxica si tardás demasiado.',          color:'#f9a825', bc:'rgba(249,168,37,0.4)',  chestMul:0.9,  enemyMul:1.25},
+  {id:'apagon',     name:'Apagón',     icon:'🔦', desc:'Visibilidad reducida. Peleá dentro de tu cono de luz.', color:'#263238', bc:'rgba(96,125,139,0.45)', chestMul:1.05, enemyMul:1.15},
+  {id:'incursion',  name:'Incursión',  icon:'🗺️', desc:'Corrida más larga con recompensas acumuladas.',         color:'#6d4c41', bc:'rgba(109,76,65,0.4)',   chestMul:1.25, enemyMul:1.15},
 ];
 
 // Total worker housing capacity across all alojamiento buildings
@@ -710,10 +716,16 @@ function pickMissionType(){
   const _freeHousing=_cap-_usedWorkers-_stashWorkers;
   const hasAlojamiento=_freeHousing>0;
   const pool=[
-    {w:200, v:'saqueo'},
-    {w:hasAlojamiento?80:0, v:'rescate'},
+    {w:160, v:'saqueo'},
+    {w:hasAlojamiento?70:0, v:'rescate'},
     {w:20,  v:'jefe'},
     {w:tallerMec>0?10*tallerMec:0, v:'vehiculo'},
+    {w:55,  v:'defensa'},
+    {w:55,  v:'purga'},
+    {w:35,  v:'horda'},
+    {w:45,  v:'cuarentena'},
+    {w:45,  v:'apagon'},
+    {w:35,  v:'incursion'},
   ];
   const total=pool.reduce((s,e)=>s+e.w,0);
   let r=Math.random()*total;
@@ -729,8 +741,8 @@ function genRandomMission(idx){
   const floors=1+Math.floor(Math.random()*4);
   const floorTiles=Math.round(size.cols*size.rows*0.65);
   const enemyCount=Math.max(1,Math.round(floorTiles*density.ratio*vehicleNoiseMul()*mtype.enemyMul));
-  // Jefe adds 1 floor (boss floor)
-  const _floors=vehicleMaxFloors(floors)+(mtype.id==='jefe'?1:0);
+  // Jefe adds 1 floor (boss floor); Incursión adds extra depth from the beginning.
+  const _floors=vehicleMaxFloors(floors)+(mtype.id==='jefe'?1:0)+(mtype.id==='incursion'?2:0);
   return {
     id:'m'+idx,
     icon:mtype.icon,
@@ -744,6 +756,7 @@ function genRandomMission(idx){
     borderColor:mtype.bc,
     detail:[
       `${mtype.icon} ${mtype.name} — ${scenario.icon} ${scenario.name}`,
+      mtype.desc,
       `${_floors} piso${_floors>1?'s':''}`,
       `Tamaño: ${size.label} (${size.cols}×${size.rows})`,
       `Enemigos: ${density.label} (~${enemyCount}/piso)`,
@@ -2394,6 +2407,7 @@ function initGame(){
     waveCleared:false,
     keys:{},mouseX:W/2,mouseY:H/2,
     tick:0,gameOver:false,paused:false,countdownUntil:0,countdownStarted:0,lastShotRadius:0,lastShotTime:0,
+    _defenseUntil:0,_quarantineDeadline:0,_quarantineLastDmg:0,
   };
   applyDefaultAtts();
   generateMap();
@@ -3344,8 +3358,27 @@ function spawnWave(){
   gs.spawning=false;
   gs.waveCleared=false;
   if(gs.exitDoor)gs.exitDoor.open=false;
+  const mt=gs.mtype&&gs.mtype.id;
+  gs._defenseUntil=mt==='defensa'?Date.now()+45000:0;
+  gs._quarantineDeadline=mt==='cuarentena'?Date.now()+60000:0;
+  gs._quarantineLastDmg=0;
   const _scName=gs._scenario?gs._scenario.icon+' '+gs._scenario.name:'';
-  showBanner('wave-banner',`Piso ${gs.floor} — ${_scName} — ${gs.waveEnemyCount||'?'} enemigos`);
+  const _special=mt==='defensa'?' — resistí 45s':mt==='cuarentena'?' — cuarentena en 60s':mt==='apagon'?' — visibilidad reducida':mt==='incursion'?' — incursión extendida':'';
+  showBanner('wave-banner',`Piso ${gs.floor} — ${_scName} — ${gs.waveEnemyCount||'?'} enemigos${_special}`);
+}
+
+function canOpenExitForMission(){
+  if(!gs)return false;
+  if(gs.mtype&&gs.mtype.id==='defensa')return Date.now()>=(gs._defenseUntil||0);
+  return true;
+}
+
+function tryOpenClearedExit(){
+  if(!gs||gs.spawning||gs.waveCleared||gs.enemies.length>0)return;
+  if(!canOpenExitForMission())return;
+  gs.waveCleared=true;
+  if(gs.exitDoor)gs.exitDoor.open=true;
+  addLog('🚪 Zona despejada — avanzá al siguiente piso');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3685,11 +3718,7 @@ function killEnemy(e){
   gs.enemies=gs.enemies.filter(x=>x!==e);
   if(e.splitOnDeath)spawnSplitWalkers(e);
   persistRunProgress();
-  if(gs.enemies.length===0&&!gs.spawning&&!gs.waveCleared){
-    gs.waveCleared=true;
-    if(gs.exitDoor)gs.exitDoor.open=true;
-    addLog('🚪 Zona despejada — avanzá al siguiente piso');
-  }
+  tryOpenClearedExit();
 }
 
 function triggerSepulchralEcho(e){
@@ -4046,7 +4075,44 @@ function gameLoop(ts){
   if(gs.gameOver){drawGameOver();updateHUD();return;}
   if(isCountdownActive()){draw();updateHUD();return;}
   if(gs.countdownUntil){gs.countdownUntil=0;const hint=document.getElementById('countdown-hint');if(hint)hint.style.opacity='0';}
+  updateMissionHazards(dt);
   update(dt);draw();updateHUD();
+}
+
+function drawMissionVisibilityOverlay(){
+  if(!gs||!(gs.mtype&&gs.mtype.id==='apagon'))return;
+  const p=gs.player;
+  const sx=p.x+p.w/2-gs.camera.x,sy=p.y+p.h/2-gs.camera.y;
+  const grd=ctx.createRadialGradient(sx,sy,70,sx,sy,230);
+  grd.addColorStop(0,'rgba(0,0,0,0)');
+  grd.addColorStop(0.55,'rgba(0,0,0,0.38)');
+  grd.addColorStop(1,'rgba(0,0,0,0.86)');
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);ctx.restore();
+}
+
+function updateMissionHazards(dt){
+  if(!gs||!gs.player)return;
+  const now=Date.now();
+  if(gs.mtype&&gs.mtype.id==='defensa'&&gs.enemies.length===0&&!gs.waveCleared){
+    const left=Math.max(0,Math.ceil(((gs._defenseUntil||0)-now)/1000));
+    const hint=document.getElementById('countdown-hint');
+    if(left>0&&hint){hint.style.opacity='1';hint.textContent=`🛡️ DEFENSA — resistí ${left}s`; }
+    if(left<=0){if(hint)hint.style.opacity='0';tryOpenClearedExit();}
+  }
+  if(gs.mtype&&gs.mtype.id==='cuarentena'&&gs._quarantineDeadline){
+    const left=Math.ceil((gs._quarantineDeadline-now)/1000);
+    const hint=document.getElementById('countdown-hint');
+    if(left>0&&left<=10&&hint){hint.style.opacity='1';hint.textContent=`⏱️ CUARENTENA EN ${left}s`; }
+    if(left<=0){
+      if(hint){hint.style.opacity='1';hint.textContent='☣️ CUARENTENA ACTIVA — la zona te daña';}
+      if(now-(gs._quarantineLastDmg||0)>1000){
+        gs._quarantineLastDmg=now;
+        gs.player.hp-=3;
+        spawnDmgNumber(gs.player.x+gs.player.w/2,gs.player.y,'3',true);
+        if(gs.player.hp<=0){gs.gameOver=true;persistRunProgress();}
+      }
+    }
+  }
 }
 
 function updateGolems(now){
@@ -4442,6 +4508,7 @@ function draw(){
     else if(b.type==='lightning'){ctx.strokeStyle='#90e0ff';ctx.lineWidth=3;ctx.shadowColor='#40a0ff';ctx.shadowBlur=10;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(b.x,b.y,b.r*0.4,0,Math.PI*2);ctx.fill();}
     ctx.restore();
   }
+  drawMissionVisibilityOverlay();
   // Player
   const p=gs.player,now=Date.now();
   ctx.save();ctx.translate(p.x+p.w/2,p.y+p.h/2);
