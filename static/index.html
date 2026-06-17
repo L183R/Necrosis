@@ -3023,12 +3023,26 @@ function renderChestModal(){
   // Left: all chests with loot
   const foundEl=document.getElementById('chest-found-list');
   foundEl.innerHTML='';
+  const bpChests=gs.chests
+    .map((chest,idx)=>({chest,idx}))
+    .filter(({chest})=>!chest.taken&&chest.loot&&chest.loot.type==='bp');
+  const bpTotal=bpChests.reduce((sum,{chest})=>sum+(chest.loot.data?.bp||0),0);
+  if(bpTotal>0){
+    foundEl.innerHTML+=`<div class="chest-item" style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+      <span class="ci-icon">💰</span>
+      <div class="ci-info"><div class="ci-name" style="font-size:10px">Blood Points</div><div class="ci-desc">+${bpTotal} BP (${bpChests.length} montón${bpChests.length>1?'es':''})</div></div>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="ci-btn" onclick="takeChestBpStack()">TOMAR</button>
+      </div>
+    </div>`;
+  }
   gs.chests.forEach((chest,idx)=>{
     const l=chest.loot;
+    if(!l||l.type==='bp')return;
     const taken=chest.taken;
     const freeSlot=p.pockets.findIndex(s=>s===null);
     // For ammo: can also take if there's an existing box of same caliber+size with space
-    let canTake=!taken&&(l.type==='bp'||freeSlot>=0);
+    let canTake=!taken&&freeSlot>=0;
     let btnLabel='TOMAR';
     if(!taken&&l.type==='ammo'){
       const ab=l.data||{};
@@ -3050,7 +3064,7 @@ function renderChestModal(){
       </div>
     </div>`;
   });
-  if(!gs.chests.length) foundEl.innerHTML='<div style="font-size:10px;color:#3a3028">Sin cofres esta oleada.</div>';
+  if(!foundEl.innerHTML) foundEl.innerHTML='<div style="font-size:10px;color:#3a3028">Sin cofres esta oleada.</div>';
   // Vehicle cargo column
   const vcolEl=document.getElementById('chest-vehicle-col');
   if(vcolEl){
@@ -3083,6 +3097,21 @@ function renderChestModal(){
     pockEl.innerHTML+=`<div style="display:flex;align-items:center;gap:4px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
       <span style="font-size:11px;flex:1;color:#c8bfa8">${i+1}. ${label}</span>${chestBtn}${vehBtn}</div>`;
   });
+}
+function takeChestBpStack(){
+  const p=gs.player;
+  let total=0;
+  gs.chests.forEach(chest=>{
+    const l=chest.loot;
+    if(chest.taken||!l||l.type!=='bp')return;
+    total+=l.data?.bp||0;
+    chest.taken=true;
+  });
+  if(total<=0)return;
+  p.bp+=total;
+  addLog(`💰 +${total} BP de cofres`);
+  persistRunProgress();
+  renderChestModal();
 }
 function takeChestItem(idx){
   const chest=gs.chests[idx];
