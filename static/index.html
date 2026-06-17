@@ -2197,6 +2197,7 @@ const PLAYER_SPD=3.0*0.4*0.4;
 const ENEMY_MAX_SPD=PLAYER_SPD*0.80;
 const CANNIBAL_SPAWN_CHANCE=1/500;
 const CANNIBAL_SPEED=PLAYER_SPD*0.5;
+const CANNIBAL_SPEED_ABSORB_RATE=0.05;
 const MINE_BASE_BP_PER_HOUR=100;
 const MINE_WORKER_BP_PER_HOUR=200;
 
@@ -3344,13 +3345,14 @@ function cannibalConsumeEnemy(cannibal,prey){
   cannibal.maxHp+=prey.maxHp||prey.hp||0;
   cannibal.hp+=Math.max(0,prey.hp||0);
   cannibal.dmg+=prey.dmg||0;
+  cannibal.speed+=(prey.speed||0)*CANNIBAL_SPEED_ABSORB_RATE;
   cannibal.xp=(cannibal.xp||0)+(prey.xp||0);
   cannibal.x+=prey.size*0.08;
   cannibal.y+=prey.size*0.08;
   spawnExplosion(prey.x+prey.size/2,prey.y+prey.size/2,22,prey.color);
   spawnDmgNumber(prey.x+prey.size/2,prey.y,'ABS',false);
   gs.enemies=gs.enemies.filter(e=>e!==prey);
-  addLog(`🍖 ${cannibal.name} absorbió a ${prey.name}`);
+  addLog(`🍖 ${cannibal.name} absorbió a ${prey.name} (+${Math.round((prey.speed||0)*CANNIBAL_SPEED_ABSORB_RATE*100)/100} vel.)`);
 }
 function spawnSplitWalkers(e){
   const walker=ENEMY_TYPES[0];
