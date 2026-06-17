@@ -696,6 +696,7 @@ const MISSION_TYPES=[
   {id:'defensa',    name:'Defensa',    icon:'🛡️', desc:'Aguantá la posición: la puerta tarda en liberarse.',    color:'#5e35b1', bc:'rgba(94,53,177,0.4)',   chestMul:0.75, enemyMul:1.35},
   {id:'purga',      name:'Purga',      icon:'☣️', desc:'Zona infestada. Eliminá focos densos de infección.',    color:'#558b2f', bc:'rgba(85,139,47,0.4)',   chestMul:0.85, enemyMul:1.45},
   {id:'horda',      name:'Horda',      icon:'🧟', desc:'Oleada masiva con pocos recursos.',                    color:'#c62828', bc:'rgba(198,40,40,0.4)',   chestMul:0.35, enemyMul:3.5},
+  {id:'super_malote',name:'Super Malote',icon:'💗', desc:'Enemigos con aura rosa: doble vida, doble ataque y XP ×3.',     color:'#ff4fb8', bc:'rgba(255,79,184,0.45)', chestMul:1.0,  enemyMul:1.25, enemyHpMul:2, enemyDmgMul:2, enemyXpMul:3, pinkAura:true},
   {id:'cuarentena', name:'Cuarentena', icon:'⏱️', desc:'La zona se vuelve tóxica si tardás demasiado.',          color:'#f9a825', bc:'rgba(249,168,37,0.4)',  chestMul:0.9,  enemyMul:1.25},
   {id:'apagon',     name:'Apagón',     icon:'🔦', desc:'Visibilidad reducida. Peleá dentro de tu cono de luz.', color:'#263238', bc:'rgba(96,125,139,0.45)', chestMul:1.05, enemyMul:1.15},
   {id:'incursion',  name:'Incursión',  icon:'🗺️', desc:'Corrida más larga con recompensas acumuladas.',         color:'#6d4c41', bc:'rgba(109,76,65,0.4)',   chestMul:1.25, enemyMul:1.15},
@@ -723,6 +724,7 @@ function pickMissionType(){
     {w:55,  v:'defensa'},
     {w:55,  v:'purga'},
     {w:35,  v:'horda'},
+    {w:30,  v:'super_malote'},
     {w:45,  v:'cuarentena'},
     {w:45,  v:'apagon'},
     {w:35,  v:'incursion'},
@@ -3278,12 +3280,19 @@ function makeEnemy(t,pos,overrides={}){
   const hp=overrides.hp??(t.hp+gs.floor*10+gs.wave*5);
   const spd=overrides.speed??Math.min(t.speed+gs.floor*0.03+gs.wave*0.01,ENEMY_MAX_SPD);
   const detect=t.screenDetect?Infinity:100+Math.random()*80;
+  const mt=gs&&gs.mtype?gs.mtype:{};
+  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1;
+  const finalHp=Math.round(hp*hpMul);
+  const finalMaxHp=Math.round((overrides.maxHp??hp)*hpMul);
+  const finalDmg=Math.round((overrides.dmg??(t.dmg+gs.floor*2))*dmgMul);
+  const finalXp=Math.round((overrides.xp??t.xp)*xpMul);
   return {x:pos.x,y:pos.y,
-    hp,maxHp:overrides.maxHp??hp,
-    dmg:overrides.dmg??(t.dmg+gs.floor*2),speed:spd,xp:overrides.xp??t.xp,bp:overrides.bp??t.bp,
+    hp:finalHp,maxHp:finalMaxHp,
+    dmg:finalDmg,speed:spd,xp:finalXp,bp:overrides.bp??t.bp,
     size:overrides.size??t.size,color:t.color,eyeColor:t.eyeColor,name:overrides.name??t.name,
     ghost:t.ghost||false,screenDetect:t.screenDetect||false,packAura:t.packAura||0,splitOnDeath:overrides.splitOnDeath??(t.splitOnDeath||false),
     isCannibal:overrides.isCannibal??(t.isCannibal||false),isBoss:overrides.isBoss??(t.isBoss||false),
+    pinkAura:overrides.pinkAura??!!mt.pinkAura,
     attackCd:0,stunTime:0,angle:0,wobble:Math.random()*Math.PI*2,
     detect:overrides.detect??detect,alerted:overrides.alerted??false,idleAngle:Math.random()*Math.PI*2,idleTimer:0};
 }
@@ -3805,14 +3814,18 @@ function triggerSepulchralEcho(e){
 function spawnBoss(){
   const pos=findFreePos(60,Math.floor(mapW()/2),Math.floor(mapH()/2));
   const bossHp=300+gs.floor*50;
+  const mt=gs&&gs.mtype?gs.mtype:{};
+  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1;
+  const finalBossHp=Math.round(bossHp*hpMul);
   gs.enemies.push({
     x:pos.x,y:pos.y,
-    hp:bossHp,maxHp:bossHp,
-    dmg:35+gs.floor*5,speed:0.9,
-    xp:200,bp:150,
+    hp:finalBossHp,maxHp:finalBossHp,
+    dmg:Math.round((35+gs.floor*5)*dmgMul),speed:0.9,
+    xp:Math.round(200*xpMul),bp:150,
     size:56,color:'#8B0000',eyeColor:'#ff0000',
     name:'JEFE',ghost:false,attackCd:0,stunTime:0,
     angle:0,wobble:0,detect:300,alerted:true,idleAngle:0,idleTimer:0,
+    pinkAura:!!mt.pinkAura,
     isBoss:true,
   });
   showBanner('wave-banner','💀 JEFE DETECTADO — ¡Elímina al jefe!');
@@ -4582,6 +4595,13 @@ function draw(){
     const wb=e.wobble,now2=Date.now();ctx.save();ctx.translate(e.x+e.size/2,e.y+e.size/2);
     if(e.ghost)ctx.globalAlpha=0.68;
     if(e.isCannibal){ctx.shadowColor='#ff3018';ctx.shadowBlur=14;}
+    if(e.pinkAura){
+      const pulse=0.45+Math.sin(now2*0.006+e.wobble)*0.18;
+      ctx.shadowColor='#ff4fb8';ctx.shadowBlur=24;
+      ctx.beginPath();ctx.arc(0,0,e.size*0.78+Math.sin(now2*0.004+e.wobble)*3,0,Math.PI*2);
+      ctx.fillStyle=`rgba(255,79,184,${pulse})`;ctx.fill();
+      ctx.strokeStyle='rgba(255,170,220,0.85)';ctx.lineWidth=2;ctx.stroke();
+    }
     ctx.beginPath();ctx.ellipse(0,e.size/2-2,e.size*0.45,5,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fill();
     ctx.beginPath();ctx.ellipse(Math.sin(wb)*2,Math.cos(wb*0.7),e.size/2,e.size/2+3,0,0,Math.PI*2);ctx.fillStyle=e.color;ctx.fill();
     if(e.stunTime>now2){ctx.fillStyle='rgba(255,255,255,0.35)';ctx.fill();}
