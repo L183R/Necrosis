@@ -149,6 +149,20 @@ canvas{display:block;position:fixed;inset:0}
   border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:8px 10px;
   font-size:9px;color:#c8bfa8;width:200px;pointer-events:none;line-height:1.5}
 .att-opt:hover .att-tip{display:block}
+
+#screen-codex{background:#0d0d12;overflow-y:auto;padding:32px 24px;align-items:stretch;justify-content:flex-start}
+.codex-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 18px}
+.codex-tab{padding:8px 12px;border:1px solid rgba(255,255,255,0.1);background:#0b0a0f;color:#6f6658;font-family:'Courier New',monospace;font-size:9px;letter-spacing:2px;cursor:pointer;text-transform:uppercase;border-radius:3px}
+.codex-tab.active{color:#f0e6d0;border-color:rgba(192,57,43,0.55);background:rgba(192,57,43,0.12)}
+.codex-list{display:flex;flex-direction:column;gap:8px}
+.codex-card{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;background:#13111a;border:1px solid rgba(255,255,255,0.07);border-radius:5px;padding:10px 12px}
+.codex-card.locked{background:#030304;border-color:#161016;color:#3a3028}
+.codex-icon{width:38px;height:38px;border-radius:4px;background:#09090d;border:1px solid rgba(255,255,255,0.09);display:flex;align-items:center;justify-content:center;font-size:22px;color:#f0e6d0}
+.codex-card.locked .codex-icon{background:#000;color:#5a5248;font-weight:bold}
+.codex-name{font-size:12px;color:#c8bfa8;letter-spacing:1px}.codex-card.locked .codex-name{color:#4a4038}
+.codex-desc{font-size:9px;color:#6f6658;line-height:1.45;margin-top:3px}.codex-card.locked .codex-desc{color:#2c2622}
+.codex-status{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8adc8a;text-align:right;white-space:nowrap}
+.codex-card.locked .codex-status{color:#4a4038}
 </style>
 </head>
 <body>
@@ -168,6 +182,7 @@ canvas{display:block;position:fixed;inset:0}
   <button class="menu-btn" onclick="requireAuthToPlay()">▶ JUGAR</button>
   <button class="menu-btn" onclick="startBossTest()">💀 PROBAR JEFES</button>
   <button class="menu-btn" onclick="requireAuthScreen('char')">◈ PERSONAJE</button>
+  <button class="menu-btn" onclick="requireAuthScreen('codex')">📖 CÓDEX</button>
   <button class="menu-btn" onclick="requireAuthScreen('base')">🏗 BASE</button>
   <button class="menu-btn" onclick="resetSave()" style="margin-top:18px;font-size:10px;opacity:0.5">✕ BORRAR PROGRESO</button>
   <div id="menu-save-info"></div>
@@ -232,6 +247,22 @@ canvas{display:block;position:fixed;inset:0}
   </div>
 </div>
 
+
+<!-- CODEX SCREEN -->
+<div class="screen hidden" id="screen-codex" style="position:fixed;inset:0;overflow-y:auto;display:block">
+  <div class="char-wrap" style="padding:32px 20px">
+    <div class="char-header">
+      <div class="char-avatar">📖</div>
+      <div>
+        <div class="char-name">CÓDEX</div>
+        <div class="char-level">REGISTRO DE AMENAZAS, EQUIPO Y ZONAS EXPLORADAS</div>
+      </div>
+    </div>
+    <div class="codex-tabs" id="codex-tabs"></div>
+    <div class="codex-list" id="codex-list"></div>
+    <button class="back-btn" onclick="showScreen('menu')">← VOLVER</button>
+  </div>
+</div>
 
 <!-- BASE SCREEN -->
 <div class="screen hidden" id="screen-base" style="position:fixed;inset:0;overflow-y:auto;display:block;background:#0d0d12">
@@ -384,6 +415,7 @@ const DEFAULT_SAVE={
   armorMods: {},  // {armorUid: [{id,stat,value},...]}  — modifications installed by taller
   ownedArmorMods: {}, // {modId: count} — armor accessories found as loot, consumed in taller
   loadout: [], // pocket configuration saved between runs [{type,...}|null]
+  codex:{enemies:{},weapons:{cuchillo:'owned',pistola:'owned'},armors:{chaleco_comun:'owned'},scenarios:{},modes:{}},
 };
 function normalizeSave(raw){
   const base=JSON.parse(JSON.stringify(DEFAULT_SAVE));
@@ -397,6 +429,8 @@ function normalizeSave(raw){
   if(!Array.isArray(merged.stash))merged.stash=[];
   if(!Array.isArray(merged.vehicles))merged.vehicles=[];
   if(!Array.isArray(merged.loadout))merged.loadout=[];
+  if(!merged.codex||typeof merged.codex!=='object')merged.codex={};
+  ['enemies','weapons','armors','scenarios','modes'].forEach(k=>{if(!merged.codex[k]||typeof merged.codex[k]!=='object'||Array.isArray(merged.codex[k]))merged.codex[k]={};});
   if(!merged.ownedArmorMods||typeof merged.ownedArmorMods!=='object'||Array.isArray(merged.ownedArmorMods))merged.ownedArmorMods={};
   merged.freeXP=Math.max(0,Math.round(+merged.freeXP||0));
   const legacyXP=Math.max(0,Math.round(+merged.xp||0));
@@ -930,6 +964,8 @@ function renderMissionSelect(){
 
 function startMission(idx){
   activeMission=_generatedMissions[idx];
+  codexDiscover('scenarios',activeMission.scenario.id,'played');
+  codexDiscover('modes',activeMission.mtype.id,'played');
 
   // Check if player has any usable weapon
   const loadout=save.loadout||[];
@@ -964,7 +1000,7 @@ function startBossTest(){
   activeMission={
     id:'boss_test',name:'Prueba de Jefes',floors:1,mapPool:null,mapSize:{cols:32,rows:22},enemyCount:4,
     mtype:{id:'boss_test',name:'Prueba de Jefes',chestMul:0,enemyMul:1},
-    scenario:{icon:'💀',name:'Arena de Jefes',loot:{}}
+    scenario:{id:'arena_jefes',icon:'💀',name:'Arena de Jefes',loot:{}}
   };
   showScreen('game');
 }
@@ -1489,6 +1525,48 @@ ensureStarterArmor();
 let _uid=Date.now();
 function nextUid(){return'u'+(++_uid);}
 
+
+function codexRank(status){return {seen:1,played:1,owned:2,defeated:3}[status]||0;}
+function codexDiscover(group,id,status){
+  if(!id||typeof save==='undefined'||!save)return;
+  if(!save.codex)save.codex={enemies:{},weapons:{},armors:{},scenarios:{},modes:{}};
+  if(!save.codex[group])save.codex[group]={};
+  if(codexRank(status)>codexRank(save.codex[group][id])){save.codex[group][id]=status;writeSave();}
+}
+function syncCodexFromSave(){
+  (save.ownedWeapons||[]).forEach(id=>codexDiscover('weapons',id,'owned'));
+  codexDiscover('armors','chaleco_comun','owned');
+  (save.ownedArmors||[]).forEach(a=>codexDiscover('armors',a.shopId||a.id,'owned'));
+}
+const CODEX_TABS=[
+  {id:'enemies',label:'Enemigos'}, {id:'weapons',label:'Armas'}, {id:'armors',label:'Armaduras'}, {id:'scenarios',label:'Escenarios'}, {id:'modes',label:'Modos'}
+];
+let codexTab='enemies';
+function codexEntries(tab){
+  if(tab==='weapons')return WEAPON_CAT.map(w=>({id:w.id,name:w.name,icon:w.icon,desc:`${w.type==='melee'?'Melee':'Distancia'} — Daño ${w.dmg}, rango ${w.range}, cadencia ${w.speed}ms.`}));
+  if(tab==='armors')return ARMOR_CAT.map(a=>({id:a.id,name:a.name,icon:a.icon,desc:`${a.desc} HP+${a.bonusHp}, MP+${a.bonusMp}, bolsillos ${a.pockets}.`}));
+  if(tab==='scenarios')return SCENARIO_TYPES.concat([{id:'arena_jefes',name:'Arena de Jefes',icon:'💀',loot:{}}]).map(sc=>({id:sc.id,name:sc.name,icon:sc.icon,desc:`Escenario con botín preferente: ${Object.keys(sc.loot||{}).join(', ')||'sin cofres'}.`}));
+  if(tab==='modes')return MISSION_TYPES.concat([{id:'boss_test',name:'Prueba de Jefes',icon:'💀',desc:'Arena especial para enfrentar jefes.',chestMul:0,enemyMul:1}]).map(m=>({id:m.id,name:m.name,icon:m.icon,desc:m.desc}));
+  const base=ENEMY_TYPES.map(e=>({id:e.id,name:e.name,icon:e.ghost?'👻':e.kamikaze?'💥':e.speed>1.4?'🏃':'🧟',desc:`HP ${e.hp}, daño ${e.dmg}, velocidad ${e.speed}. ${e.splitOnDeath?'Se divide al morir. ':''}${e.kamikaze?'Explota al acercarse. ':''}${e.packAura?'Potencia a la horda cercana. ':''}`}));
+  return base.concat([
+    {id:'canibal',name:'Caníbal',icon:'🍖',desc:'Depredador raro que detecta desde lejos y persigue sin descanso.'},
+    {id:'boss_golem',name:'JEFE GÓLEM',icon:'🪨',desc:'Jefe enorme, lento y resistente.'},
+    {id:'boss_summoner',name:'JEFE INVOCADOR',icon:'🔮',desc:'Jefe que invoca refuerzos durante la pelea.'},
+    {id:'boss_splitter',name:'JEFE FISIBLE',icon:'🧬',desc:'Jefe que se fragmenta en amenazas menores.'},
+    {id:'boss_teleporter',name:'JEFE PARPADEANTE',icon:'🌀',desc:'Jefe que se reposiciona con teletransportes.'},
+  ]);
+}
+function renderCodexScreen(){
+  syncCodexFromSave();
+  const tabs=document.getElementById('codex-tabs'),list=document.getElementById('codex-list');
+  tabs.innerHTML=CODEX_TABS.map(t=>`<button class="codex-tab ${t.id===codexTab?'active':''}" onclick="codexTab='${t.id}';renderCodexScreen()">${t.label}</button>`).join('');
+  const known=(save.codex&&save.codex[codexTab])||{};
+  list.innerHTML=codexEntries(codexTab).map(e=>{
+    const st=known[e.id]||''; const unlocked=!!st;
+    return `<div class="codex-card ${unlocked?'':'locked'}"><div class="codex-icon">${unlocked?e.icon:'?'}</div><div><div class="codex-name">${unlocked?e.name:'Desconocido'}</div><div class="codex-desc">${unlocked?e.desc:'Entrada no despejada. Explorá, jugá, encontrá o derrotá para revelar la descripción.'}</div></div><div class="codex-status">${st==='defeated'?'Derrotado':st==='owned'?'Obtenido':st==='played'?'Jugado':st==='seen'?'Visto':'No tienes'}</div></div>`;
+  }).join('');
+}
+
 // ═══════════════════════════════════════════════════════════
 // SCREEN MANAGER
 // ═══════════════════════════════════════════════════════════
@@ -1500,12 +1578,14 @@ function showScreen(name){
   document.getElementById('screen-menu').classList.toggle('hidden',name!=='menu');
   document.getElementById('screen-auth').classList.toggle('hidden',name!=='auth');
   document.getElementById('screen-char').classList.toggle('hidden',name!=='char');
+  document.getElementById('screen-codex').classList.toggle('hidden',name!=='codex');
   document.getElementById('screen-base').classList.toggle('hidden',name!=='base');
   document.getElementById('screen-mission').classList.toggle('hidden',name!=='mission');
   document.getElementById('game-ui').classList.toggle('hidden',name!=='game');
   if(name==='menu'){updateMenuInfo();stopGame();}
-  if((name==='mission'||name==='game'||name==='char'||name==='base')&&!isLoggedIn()){showScreen('auth');setAuthMessage('Tenés que iniciar sesión para ver tu progreso.',true);return;}
+  if((name==='mission'||name==='game'||name==='char'||name==='base'||name==='codex')&&!isLoggedIn()){showScreen('auth');setAuthMessage('Tenés que iniciar sesión para ver tu progreso.',true);return;}
   if(name==='char')renderCharScreen();
+  if(name==='codex')renderCodexScreen();
   if(name==='base')renderBase();
   if(name==='mission')renderMissionSelect();
   if(name==='game')startGame();
@@ -1686,7 +1766,7 @@ function movePocketArmorsToInventory(){
         if(!a.uid)a.uid=nextUid();
         if(!a.secondary)a.secondary={};
         if(!a.stars)a.stars=1;
-        if(!save.ownedArmors.some(x=>x.uid===a.uid)){save.ownedArmors.push(a);moved++;}
+        if(!save.ownedArmors.some(x=>x.uid===a.uid)){save.ownedArmors.push(a);codexDiscover('armors',a.shopId||a.id,'owned');moved++;}
         return null;
       }
       return item;
@@ -2279,7 +2359,7 @@ function upgradeSkillById(skillId,slotIdx){slotIdx=slotIdx||0;
 }
 function buyWeapon(id){
   const w=wById(id);if(!w||save.ownedWeapons.includes(id)||save.bp<w.cost)return;
-  save.bp-=w.cost;save.ownedWeapons.push(id);writeSave();renderCharScreen();
+  save.bp-=w.cost;save.ownedWeapons.push(id);codexDiscover('weapons',id,'owned');writeSave();renderCharScreen();
 }
 function buyArmor(shopId){
   // No hay tienda de armaduras. Las armaduras se consiguen como loot y se equipan en Personaje.
@@ -3260,6 +3340,7 @@ function takeChestItem(idx){
     if(l.type==='weapon'){
       p.pockets[freeSlot]={type:'weapon',id:l.data.weaponId};
       if(!save.ownedWeapons.includes(l.data.weaponId))save.ownedWeapons.push(l.data.weaponId);
+      codexDiscover('weapons',l.data.weaponId,'owned');
       p.weaponSlots=pocketWeapons(p.pockets);
     } else if(l.type==='consumable'){
       p.pockets[freeSlot]={type:'consumable',icon:l.icon,name:l.name,data:l.data};
@@ -3414,14 +3495,14 @@ function advanceWave(){
 // ENEMIES
 // ═══════════════════════════════════════════════════════════
 const ENEMY_TYPES=[
-  {name:'Caminante',color:'#4a7a3a',eyeColor:'#90cc70',hp:40, dmg:8, speed:0.85,xp:12,bp:8, size:24},
-  {name:'Caminante fisible',color:'#4a7a3a',eyeColor:'#90cc70',hp:48, dmg:9, speed:0.9,xp:18,bp:12,size:24,splitOnDeath:true},
-  {name:'Corredor', color:'#7a3a3a',eyeColor:'#ff9070',hp:25, dmg:12,speed:1.6, xp:15,bp:10,size:20},
-  {name:'Kamikaze', color:'#8a3a16',eyeColor:'#ffd24a',hp:32,dmg:28,speed:1.85,xp:22,bp:14,size:22,kamikaze:true,detect:190,fuseMs:2600,explodeRadius:86,explosionDmg:70},
-  {name:'Gordo',    color:'#3a4a7a',eyeColor:'#70a0ff',hp:120,dmg:20,speed:0.5, xp:35,bp:25,size:36},
-  {name:'Mutante',  color:'#6a3a7a',eyeColor:'#ff70d0',hp:70, dmg:15,speed:1.2, xp:28,bp:20,size:28},
-  {name:'Espectro', color:'#3a6a7a',eyeColor:'#70ffee',hp:50, dmg:18,speed:1.4, xp:38,bp:28,size:22,ghost:true},
-  {name:'Aullador', color:'#7a5a1f',eyeColor:'#ffd060',hp:85, dmg:16,speed:1.3, xp:48,bp:36,size:26,screenDetect:true,packAura:160},
+  {id:'caminante',name:'Caminante',color:'#4a7a3a',eyeColor:'#90cc70',hp:40, dmg:8, speed:0.85,xp:12,bp:8, size:24},
+  {id:'caminante_fisible',name:'Caminante fisible',color:'#4a7a3a',eyeColor:'#90cc70',hp:48, dmg:9, speed:0.9,xp:18,bp:12,size:24,splitOnDeath:true},
+  {id:'corredor',name:'Corredor', color:'#7a3a3a',eyeColor:'#ff9070',hp:25, dmg:12,speed:1.6, xp:15,bp:10,size:20},
+  {id:'kamikaze',name:'Kamikaze', color:'#8a3a16',eyeColor:'#ffd24a',hp:32,dmg:28,speed:1.85,xp:22,bp:14,size:22,kamikaze:true,detect:190,fuseMs:2600,explodeRadius:86,explosionDmg:70},
+  {id:'gordo',name:'Gordo',    color:'#3a4a7a',eyeColor:'#70a0ff',hp:120,dmg:20,speed:0.5, xp:35,bp:25,size:36},
+  {id:'mutante',name:'Mutante',  color:'#6a3a7a',eyeColor:'#ff70d0',hp:70, dmg:15,speed:1.2, xp:28,bp:20,size:28},
+  {id:'espectro',name:'Espectro', color:'#3a6a7a',eyeColor:'#70ffee',hp:50, dmg:18,speed:1.4, xp:38,bp:28,size:22,ghost:true},
+  {id:'aullador',name:'Aullador', color:'#7a5a1f',eyeColor:'#ffd060',hp:85, dmg:16,speed:1.3, xp:48,bp:36,size:26,screenDetect:true,packAura:160},
 ];
 function makeEnemy(t,pos,overrides={}){
   const hp=overrides.hp??(t.hp+gs.floor*10+gs.wave*5);
@@ -3436,7 +3517,7 @@ function makeEnemy(t,pos,overrides={}){
   return {x:pos.x,y:pos.y,
     hp:finalHp,maxHp:finalMaxHp,
     dmg:finalDmg,speed:spd,xp:finalXp,bp:overrides.bp??t.bp,
-    size:overrides.size??t.size,color:t.color,eyeColor:t.eyeColor,name:overrides.name??t.name,
+    size:overrides.size??t.size,color:t.color,eyeColor:t.eyeColor,name:overrides.name??t.name,codexId:overrides.codexId??t.id??(overrides.name??t.name),
     ghost:t.ghost||false,screenDetect:t.screenDetect||false,packAura:t.packAura||0,splitOnDeath:overrides.splitOnDeath??(t.splitOnDeath||false),
     kamikaze:overrides.kamikaze??(t.kamikaze||false),fuseMs:overrides.fuseMs??t.fuseMs,explodeRadius:overrides.explodeRadius??t.explodeRadius,explosionDmg:overrides.explosionDmg??t.explosionDmg,detonating:false,detonateAt:0,
     isCannibal:overrides.isCannibal??(t.isCannibal||false),isBoss:overrides.isBoss??(t.isBoss||false),
@@ -3448,7 +3529,9 @@ function spawnEnemy(type,opts={}){
   const isCannibal=!opts.noCannibal&&Math.random()<CANNIBAL_SPAWN_CHANCE;
   const t=isCannibal?CANNIBAL_TYPE:ENEMY_TYPES[type];
   const pos=opts.pos||findSpawnPosFarFromPlayer(t.size,opts.minPlayerDist||0);
-  gs.enemies.push(makeEnemy(t,pos,isCannibal?{isCannibal:true,speed:CANNIBAL_SPEED,detect:Infinity,alerted:true}:{}));
+  const enemy=makeEnemy(t,pos,isCannibal?{isCannibal:true,speed:CANNIBAL_SPEED,detect:Infinity,alerted:true,codexId:'canibal',name:'Caníbal'}:{});
+  gs.enemies.push(enemy);
+  codexDiscover('enemies',enemy.codexId,'seen');
   if(isCannibal)announceCannibal();
 }
 
@@ -3534,6 +3617,7 @@ function spawnWave(){
   gs._quarantineLastDmg=0;
   const _scName=gs._scenario?gs._scenario.icon+' '+gs._scenario.name:'';
   const _special=mt==='defensa'?' — resistí 45s':mt==='purga'?' — destruí 3 portales':mt==='cuarentena'?' — cuarentena en 60s':mt==='apagon'?' — visibilidad reducida':mt==='incursion'?' — incursión extendida':'';
+  codexDiscover('enemies','boss_'+kind,'seen');
   showBanner('wave-banner',`Piso ${gs.floor} — ${_scName} — ${gs.waveEnemyCount||'?'} enemigos${_special}`);
 }
 
@@ -3936,7 +4020,7 @@ function killEnemy(e,opts={}){
   const noReward=!!opts.noReward;
   const xpGain=noReward?0:Math.round((e.xp+(sec.xpBonus||0))*_xpMul);
   const bpGain=noReward?0:Math.round((e.bp+(sec.bpBonus||0))*_bpMul);
-  if(!noReward){p.freeXP+=xpGain;p.bp+=bpGain;triggerSepulchralEcho(e);}
+  if(!noReward){p.freeXP+=xpGain;p.bp+=bpGain;triggerSepulchralEcho(e);codexDiscover('enemies',e.codexId||e.name,'defeated');}
   spawnExplosion(e.x+e.size/2,e.y+e.size/2,18,e.color);
   addLog(noReward?`Sin recompensa — ${e.name}`:`+${xpGain} XP  +${bpGain} BP — ${e.name}`);
   gs.enemies=gs.enemies.filter(x=>x!==e);
@@ -4009,8 +4093,9 @@ function spawnBoss(kind='golem',index=0,total=1){
     ghost:false,attackCd:0,stunTime:0,
     angle:0,wobble:0,detect:300,alerted:true,idleAngle:0,idleTimer:0,
     pinkAura:!!mt.pinkAura,
-    isBoss:true,bossKind:kind,lastSummon:Date.now()+2500,lastSplit:Date.now()+3000,splitUntil:0,splitParts:null,lastTeleport:0,
+    isBoss:true,codexId:'boss_'+kind,bossKind:kind,lastSummon:Date.now()+2500,lastSplit:Date.now()+3000,splitUntil:0,splitParts:null,lastTeleport:0,
   });
+  codexDiscover('enemies','boss_'+kind,'seen');
   showBanner('wave-banner',total>1?'💀 PRUEBA DE JEFES — cuatro amenazas detectadas':'💀 JEFE DETECTADO — ¡Elímina al jefe!');
   addLog('💀 '+(total>1?'Jefes de prueba desplegados': 'Un jefe aparece: '+kind));
 }
@@ -4625,7 +4710,8 @@ function update(dt){
     if(n.hp<=0){
       n.alive=false;
       addLog('🧍 El superviviente ha muerto.');
-      showBanner('wave-banner','MISIÓN FALLIDA — Superviviente muerto');
+      codexDiscover('enemies','boss_'+kind,'seen');
+  showBanner('wave-banner','MISIÓN FALLIDA — Superviviente muerto');
     }
   }
   // Reload
