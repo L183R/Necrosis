@@ -3720,7 +3720,6 @@ function spawnWave(){
   gs._quarantineLastDmg=0;
   const _scName=gs._scenario?gs._scenario.icon+' '+gs._scenario.name:'';
   const _special=mt==='defensa'?' — resistí 45s':mt==='purga'?' — destruí 3 portales':mt==='cuarentena'?' — cuarentena en 60s':mt==='apagon'?' — visibilidad reducida':mt==='incursion'?' — incursión extendida':'';
-  codexDiscover('enemies','boss_'+kind,'seen');
   showBanner('wave-banner',`Piso ${gs.floor} — ${_scName} — ${gs.waveEnemyCount||'?'} enemigos${_special}`);
 }
 
@@ -4820,8 +4819,7 @@ function update(dt){
     if(n.hp<=0){
       n.alive=false;
       addLog('🧍 El superviviente ha muerto.');
-      codexDiscover('enemies','boss_'+kind,'seen');
-  showBanner('wave-banner','MISIÓN FALLIDA — Superviviente muerto');
+      showBanner('wave-banner','MISIÓN FALLIDA — Superviviente muerto');
     }
   }
   // Reload
