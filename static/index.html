@@ -18,6 +18,17 @@ canvas{display:block;position:fixed;inset:0}
 .menu-btn{padding:13px 52px;border:1px solid rgba(255,255,255,0.14);background:transparent;color:#c8bfa8;font-family:'Courier New',monospace;font-size:12px;letter-spacing:4px;cursor:pointer;text-transform:uppercase;transition:all 0.18s;margin:5px;min-width:240px}
 .menu-btn:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.3);color:#f0e6d0}
 #menu-save-info{margin-top:28px;font-size:10px;letter-spacing:2px;color:#3a3028}
+.auth-panel{width:min(92vw,380px);background:#0f0e14;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:26px 24px;box-shadow:0 18px 48px rgba(0,0,0,0.55)}
+.auth-title{font-size:15px;letter-spacing:5px;color:#c0392b;text-align:center;margin-bottom:8px;text-transform:uppercase}
+.auth-sub{font-size:9px;letter-spacing:2px;color:#5a5248;text-align:center;line-height:1.5;margin-bottom:20px}
+.auth-field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.auth-field label{font-size:9px;letter-spacing:3px;color:#5a5248;text-transform:uppercase}
+.auth-field input{width:100%;background:#09090d;border:1px solid rgba(255,255,255,0.12);border-radius:3px;color:#f0e6d0;font-family:'Courier New',monospace;font-size:12px;padding:11px 10px;outline:none}
+.auth-field input:focus{border-color:rgba(192,57,43,0.6);box-shadow:0 0 0 2px rgba(192,57,43,0.12)}
+.auth-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.auth-msg{min-height:15px;margin-top:12px;text-align:center;font-size:9px;letter-spacing:1px;color:#8a7e6e;line-height:1.4}
+#menu-user-info{margin-bottom:18px;font-size:10px;letter-spacing:2px;color:#5a5248;text-align:center;text-transform:uppercase}
+#menu-user-info strong{color:#c8bfa8}
 #vehicle-intro{position:fixed;inset:0;background:radial-gradient(circle at 50% 35%,rgba(32,28,24,0.92),rgba(10,10,15,0.98) 58%,#050507);z-index:120;display:flex;align-items:center;justify-content:center;overflow:hidden;pointer-events:none}
 #vehicle-intro.hidden{display:none!important}
 #vehicle-intro-road{position:absolute;left:0;right:0;top:55%;height:86px;background:linear-gradient(to bottom,#111,#1c1a18 45%,#0d0d10);border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08)}
@@ -153,11 +164,35 @@ canvas{display:block;position:fixed;inset:0}
   <div id="menu-title">NECROSIS</div>
   <div id="menu-resources"><span>BP <span class="menu-resource-val" id="menu-bp-disp">0</span></span><span>XP <span class="menu-resource-val" id="menu-xp-disp">0</span></span></div>
   <div id="menu-sub">SURVIVAL RPG</div>
-  <button class="menu-btn" onclick="playVehicleIntroAndShowMission()">▶ JUGAR</button>
+  <div id="menu-user-info"></div>
+  <button class="menu-btn" onclick="requireAuthToPlay()">▶ JUGAR</button>
   <button class="menu-btn" onclick="showScreen('char')">◈ PERSONAJE</button>
   <button class="menu-btn" onclick="showScreen('base')">🏗 BASE</button>
   <button class="menu-btn" onclick="resetSave()" style="margin-top:18px;font-size:10px;opacity:0.5">✕ BORRAR PROGRESO</button>
   <div id="menu-save-info"></div>
+</div>
+
+
+<!-- AUTH SCREEN -->
+<div class="screen hidden" id="screen-auth">
+  <div class="auth-panel">
+    <div class="auth-title">Acceso requerido</div>
+    <div class="auth-sub">Para jugar necesitás iniciar sesión o crear una cuenta local de superviviente.</div>
+    <div class="auth-field">
+      <label for="auth-user">Usuario</label>
+      <input id="auth-user" autocomplete="username" maxlength="24" placeholder="Tu nombre">
+    </div>
+    <div class="auth-field">
+      <label for="auth-pass">Contraseña</label>
+      <input id="auth-pass" type="password" autocomplete="current-password" maxlength="48" placeholder="••••••••">
+    </div>
+    <div class="auth-actions">
+      <button class="menu-btn" style="min-width:0;padding:11px 0;font-size:10px" onclick="loginAccount()">INICIAR</button>
+      <button class="menu-btn" style="min-width:0;padding:11px 0;font-size:10px" onclick="createAccount()">CREAR</button>
+    </div>
+    <button class="back-btn" onclick="showScreen('menu')">← VOLVER</button>
+    <div class="auth-msg" id="auth-msg"></div>
+  </div>
 </div>
 
 <!-- CHARACTER SCREEN -->
@@ -325,6 +360,8 @@ canvas{display:block;position:fixed;inset:0}
 // SAVE
 // ═══════════════════════════════════════════════════════════
 const SAVE_KEY='necrosis_v32';
+const ACCOUNT_KEY='necrosis_accounts_v1';
+const SESSION_KEY='necrosis_current_account';
 const DEFAULT_SAVE={
   freeXP:0,bp:0,
   level:1,xp:0,xpNext:100,
@@ -380,6 +417,17 @@ function loadSave(){
   catch(e){return normalizeSave();}
 }
 function writeSave(){localStorage.setItem(SAVE_KEY,JSON.stringify(save));}
+function getAccounts(){try{return JSON.parse(localStorage.getItem(ACCOUNT_KEY)||'{}')||{};}catch(e){return {};}}
+function writeAccounts(accounts){localStorage.setItem(ACCOUNT_KEY,JSON.stringify(accounts));}
+function currentAccount(){return localStorage.getItem(SESSION_KEY)||'';}
+function isLoggedIn(){const user=currentAccount();return !!(user&&getAccounts()[user]);}
+function setAuthMessage(msg,isError=false){const el=document.getElementById('auth-msg');if(el){el.textContent=msg;el.style.color=isError?'#c0392b':'#8adc8a';}}
+function readAuthFields(){return {user:(document.getElementById('auth-user')?.value||'').trim().slice(0,24),pass:document.getElementById('auth-pass')?.value||''};}
+function validateAuthFields(user,pass){if(user.length<3)return 'El usuario debe tener al menos 3 caracteres.';if(pass.length<4)return 'La contraseña debe tener al menos 4 caracteres.';return '';}
+function loginAccount(){const {user,pass}=readAuthFields();const error=validateAuthFields(user,pass);if(error){setAuthMessage(error,true);return;}const accounts=getAccounts();if(!accounts[user]||accounts[user].password!==pass){setAuthMessage('Usuario o contraseña incorrectos.',true);return;}localStorage.setItem(SESSION_KEY,user);setAuthMessage('Sesión iniciada. Preparando expedición...');updateMenuInfo();setTimeout(playVehicleIntroAndShowMission,350);}
+function createAccount(){const {user,pass}=readAuthFields();const error=validateAuthFields(user,pass);if(error){setAuthMessage(error,true);return;}const accounts=getAccounts();if(accounts[user]){setAuthMessage('Ese usuario ya existe. Iniciá sesión.',true);return;}accounts[user]={password:pass,createdAt:Date.now()};writeAccounts(accounts);localStorage.setItem(SESSION_KEY,user);setAuthMessage('Cuenta creada. Preparando expedición...');updateMenuInfo();setTimeout(playVehicleIntroAndShowMission,350);}
+function logoutAccount(){localStorage.removeItem(SESSION_KEY);updateMenuInfo();}
+function requireAuthToPlay(){if(isLoggedIn()){playVehicleIntroAndShowMission();return;}showScreen('auth');setAuthMessage('Ingresá tus datos o creá una cuenta nueva.');setTimeout(()=>document.getElementById('auth-user')?.focus(),0);}
 function spendFreeXP(cost){
   cost=Math.max(0,Math.round(+cost||0));
   const xp=+save.freeXP||0;
@@ -1397,6 +1445,7 @@ let gs=null,loopRunning=false;
 function showScreen(name){
   document.getElementById('victory-modal').style.display='none';
   document.getElementById('screen-menu').classList.toggle('hidden',name!=='menu');
+  document.getElementById('screen-auth').classList.toggle('hidden',name!=='auth');
   document.getElementById('screen-char').classList.toggle('hidden',name!=='char');
   document.getElementById('screen-base').classList.toggle('hidden',name!=='base');
   document.getElementById('screen-mission').classList.toggle('hidden',name!=='mission');
@@ -1405,6 +1454,7 @@ function showScreen(name){
   if(name==='char')renderCharScreen();
   if(name==='base')renderBase();
   if(name==='mission')renderMissionSelect();
+  if((name==='mission'||name==='game')&&!isLoggedIn()){showScreen('auth');setAuthMessage('Tenés que iniciar sesión para jugar.',true);return;}
   if(name==='game')startGame();
   currentScreen=name;
 }
@@ -1412,6 +1462,11 @@ function updateMenuInfo(){
   const s=save;
   document.getElementById('menu-bp-disp').textContent=s.bp;
   document.getElementById('menu-xp-disp').textContent=s.freeXP;
+  const userInfo=document.getElementById('menu-user-info');
+  if(userInfo){
+    const user=currentAccount();
+    userInfo.innerHTML=isLoggedIn()?`Sesión: <strong>${user}</strong> · <button onclick="logoutAccount()" style="background:transparent;border:0;color:#8a7e6e;font-family:inherit;font-size:10px;letter-spacing:2px;cursor:pointer;text-decoration:underline">CERRAR</button>`:'No has iniciado sesión';
+  }
   document.getElementById('menu-save-info').textContent=
     s.level>1?`Nivel ${s.level}  •  ${s.bp} BP  •  ${s.freeXP} XP  •  Piso más alto: ${s.highestFloor}`:'Sin partida guardada';
 }
