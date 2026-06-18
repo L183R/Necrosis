@@ -1,22 +1,132 @@
 import asyncio
+import hashlib
 import json
 import secrets
 import time
 from pathlib import Path
 from typing import Dict, Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+DATA_FILE = BASE_DIR / "accounts.json"
 
 app = FastAPI(title="NECROSIS Python Multiplayer")
 
 # rooms[room][player_id] = {"ws": WebSocket, "state": dict}
 rooms: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+
+class AuthPayload(BaseModel):
+    user: str
+    password: str
+
+
+class SavePayload(AuthPayload):
+    save: Dict[str, Any]
+
+
+def _clean_user(user: str) -> str:
+    user = (user or "").strip()[:24]
+    if len(user) < 3:
+        raise HTTPException(status_code=400, detail="El usuario debe tener al menos 3 caracteres.")
+    return user
+
+
+def _clean_password(password: str) -> str:
+    password = password or ""
+    if len(password) < 4:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 4 caracteres.")
+    return password
+
+
+def load_accounts() -> Dict[str, Dict[str, Any]]:
+    if not DATA_FILE.exists():
+        return {}
+    try:
+        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_accounts(accounts: Dict[str, Dict[str, Any]]) -> None:
+    DATA_FILE.write_text(json.dumps(accounts, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def password_hash(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000).hex()
+
+
+def make_password_record(password: str) -> Dict[str, str]:
+    salt = secrets.token_hex(16)
+    return {"salt": salt, "passwordHash": password_hash(password, salt)}
+
+
+def password_matches(account: Dict[str, Any], password: str) -> bool:
+    salt = account.get("salt")
+    expected = account.get("passwordHash")
+    if salt and expected:
+        return secrets.compare_digest(expected, password_hash(password, salt))
+    # Compatibility with old development data, if any exists.
+    return secrets.compare_digest(account.get("password", ""), password)
+
+
+def require_account(user: str, password: str) -> Dict[str, Any]:
+    accounts = load_accounts()
+    account = accounts.get(user)
+    if not account or not password_matches(account, password):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+    return account
+
+
+@app.post("/api/register")
+async def register(payload: AuthPayload):
+    user = _clean_user(payload.user)
+    password = _clean_password(payload.password)
+    accounts = load_accounts()
+    if user in accounts:
+        raise HTTPException(status_code=409, detail="Ese usuario ya existe. Iniciá sesión.")
+    accounts[user] = {**make_password_record(password), "createdAt": int(time.time() * 1000), "save": None}
+    write_accounts(accounts)
+    return {"ok": True, "user": user, "save": None}
+
+
+@app.post("/api/login")
+async def login(payload: AuthPayload):
+    user = _clean_user(payload.user)
+    password = _clean_password(payload.password)
+    account = require_account(user, password)
+    return {"ok": True, "user": user, "save": account.get("save")}
+
+
+@app.post("/api/save")
+async def save_game(payload: SavePayload):
+    user = _clean_user(payload.user)
+    password = _clean_password(payload.password)
+    accounts = load_accounts()
+    require_account(user, password)
+    accounts[user]["save"] = payload.save
+    accounts[user]["updatedAt"] = int(time.time() * 1000)
+    write_accounts(accounts)
+    return {"ok": True}
+
+
+@app.post("/api/reset")
+async def reset_game(payload: AuthPayload):
+    user = _clean_user(payload.user)
+    password = _clean_password(payload.password)
+    accounts = load_accounts()
+    require_account(user, password)
+    accounts[user]["save"] = None
+    accounts[user]["updatedAt"] = int(time.time() * 1000)
+    write_accounts(accounts)
+    return {"ok": True, "save": None}
 
 
 @app.get("/")
