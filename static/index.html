@@ -184,6 +184,7 @@ canvas{display:block;position:fixed;inset:0}
   <button class="menu-btn" onclick="requireAuthScreen('char')">◈ PERSONAJE</button>
   <button class="menu-btn" onclick="requireAuthScreen('codex')">📖 CÓDEX</button>
   <button class="menu-btn" onclick="requireAuthScreen('base')">🏗 BASE</button>
+  <button class="menu-btn" onclick="requireAuthScreen('shops')">🛒 TIENDAS</button>
   <button class="menu-btn" onclick="resetSave()" style="margin-top:18px;font-size:10px;opacity:0.5">✕ BORRAR PROGRESO</button>
   <div id="menu-save-info"></div>
 </div>
@@ -289,6 +290,25 @@ canvas{display:block;position:fixed;inset:0}
       <div id="workshop-content"></div>
     </div>
     <button class="back-btn" onclick="showScreen('menu')" style="margin-top:20px">← VOLVER AL MENÚ</button>
+  </div>
+</div>
+
+<!-- SHOPS SCREEN -->
+<div class="screen hidden" id="screen-shops" style="position:fixed;inset:0;overflow-y:auto;display:block;background:#0d0d12">
+  <div class="char-wrap" style="padding:32px 20px">
+    <div class="char-header">
+      <div class="char-avatar">🛒</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div class="char-name">TIENDAS</div>
+        <div class="char-level">COMERCIANTES DESBLOQUEABLES</div>
+      </div>
+      <div class="char-currency">
+        <div class="currency-row"><span style="font-size:14px">💰</span><span class="currency-val" id="shops-bp-disp">0</span><span class="currency-label">BP</span></div>
+      </div>
+    </div>
+    <div class="sec-title" style="margin-top:0">Comerciantes</div>
+    <div id="shops-grid"></div>
+    <button class="back-btn" onclick="showScreen('menu')">← VOLVER AL MENÚ</button>
   </div>
 </div>
 
@@ -416,6 +436,7 @@ const DEFAULT_SAVE={
   ownedArmorMods: {}, // {modId: count} — armor accessories found as loot, consumed in taller
   loadout: [], // pocket configuration saved between runs [{type,...}|null]
   codex:{enemies:{},weapons:{cuchillo:'owned',pistola:'owned'},armors:{chaleco_comun:'owned'},scenarios:{},modes:{}},
+  shopProgress:{ammoDeclined:0,consumableDeclined:0,firearmKills:0,meleeKills:0,screensCompleted:0,cannibalsDefeated:0},
 };
 function normalizeSave(raw){
   const base=JSON.parse(JSON.stringify(DEFAULT_SAVE));
@@ -430,6 +451,7 @@ function normalizeSave(raw){
   if(!Array.isArray(merged.vehicles))merged.vehicles=[];
   if(!Array.isArray(merged.loadout))merged.loadout=[];
   if(!merged.codex||typeof merged.codex!=='object')merged.codex={};
+  merged.shopProgress=Object.assign({},DEFAULT_SAVE.shopProgress,(raw&&raw.shopProgress)||{});
   ['enemies','weapons','armors','scenarios','modes'].forEach(k=>{if(!merged.codex[k]||typeof merged.codex[k]!=='object'||Array.isArray(merged.codex[k]))merged.codex[k]={};});
   if(!merged.ownedArmorMods||typeof merged.ownedArmorMods!=='object'||Array.isArray(merged.ownedArmorMods))merged.ownedArmorMods={};
   merged.freeXP=Math.max(0,Math.round(+merged.freeXP||0));
@@ -1567,6 +1589,83 @@ function renderCodexScreen(){
   }).join('');
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// SHOPS — unlockable merchants
+// ═══════════════════════════════════════════════════════════
+const SHOP_MERCHANTS=[
+  {id:'lucas',name:'Lucas',icon:'📦',buys:'Munición',type:'ammo',progress:'ammoDeclined',need:10,unlock:'Elegir no recoger 10 cajas de munición.'},
+  {id:'maria',name:'María',icon:'🩹',buys:'Consumibles',type:'consumable',progress:'consumableDeclined',need:10,unlock:'Elegir no recoger 10 consumibles.'},
+  {id:'antonio',name:'Antonio',icon:'🔫',buys:'Armas de fuego',type:'weapon_range',progress:'firearmKills',need:1000,unlock:'Matar 1000 enemigos con armas de fuego.'},
+  {id:'sofia',name:'Sofía',icon:'🪓',buys:'Armas cuerpo a cuerpo',type:'weapon_melee',progress:'meleeKills',need:1000,unlock:'Matar 1000 enemigos con armas cuerpo a cuerpo.'},
+  {id:'juan',name:'Juan',icon:'🎯',buys:'Accesorios de armas',type:'attachment',progress:'screensCompleted',need:10,unlock:'Completar exitosamente 10 pantallas.'},
+  {id:'claudia',name:'Claudia',icon:'🛡️',buys:'Accesorios de armaduras',type:'armor_mod',progress:'cannibalsDefeated',need:1,unlock:'Derrotar a 1 caníbal.'},
+];
+function shopProgress(){if(!save.shopProgress)save.shopProgress={...DEFAULT_SAVE.shopProgress};return save.shopProgress;}
+function addShopProgress(key,amount=1){const sp=shopProgress();sp[key]=Math.max(0,(+sp[key]||0)+amount);writeSave();}
+function shopItemMatches(item,merchant){
+  if(!item)return false;
+  if(merchant.type==='ammo')return item.type==='ammo';
+  if(merchant.type==='consumable')return item.type==='consumable';
+  if(merchant.type==='attachment')return item.type==='attachment';
+  if(merchant.type==='armor_mod')return item.type==='armor_mod';
+  if(merchant.type==='weapon_range'||merchant.type==='weapon_melee'){
+    if(item.type!=='weapon')return false;
+    const w=wById(item.id);return !!w&&w.type===(merchant.type==='weapon_range'?'range':'melee');
+  }
+  return false;
+}
+function shopItemValue(item){
+  if(!item)return 0;
+  if(item.type==='ammo')return Math.max(1,Math.round(((item.rounds||0)/(item.cap||item.rounds||1))*((AMMO_BOXES[item.id]&&AMMO_BOXES[item.id].cost)||item.cost||25)*0.6));
+  if(item.type==='weapon'){const w=wById(item.id);return Math.max(5,Math.round(((w&&w.cost)||60)*0.5));}
+  if(item.type==='attachment'){const a=attById(item.attId);return Math.max(5,Math.round(((a&&a.cost)||80)*0.5));}
+  if(item.type==='armor_mod'){const m=armorModById(item.modId);return Math.max(5,Math.round(((m&&m.cost)||80)*0.5));}
+  if(item.type==='consumable')return 35;
+  return 10;
+}
+function getShopSellables(merchant){
+  const out=[];
+  (save.stash||[]).forEach((item,i)=>{if(shopItemMatches(item,merchant))out.push({where:'stash',idx:i,item});});
+  (save.loadout||[]).forEach((item,i)=>{if(shopItemMatches(item,merchant))out.push({where:'loadout',idx:i,item});});
+  return out;
+}
+function sellToMerchant(merchantId,where,idx){
+  const merchant=SHOP_MERCHANTS.find(m=>m.id===merchantId);if(!merchant)return;
+  const cur=(shopProgress()[merchant.progress]||0);if(cur<merchant.need){alert('Comerciante bloqueado.');return;}
+  const arr=where==='stash'?save.stash:save.loadout;
+  const item=arr&&arr[idx];if(!shopItemMatches(item,merchant))return;
+  const value=shopItemValue(item);
+  if(where==='stash')save.stash.splice(idx,1);else save.loadout[idx]=null;
+  save.bp=(+save.bp||0)+value;
+  writeSave();renderShops();
+}
+function renderShops(){
+  const bp=document.getElementById('shops-bp-disp');if(bp)bp.textContent=save.bp;
+  const el=document.getElementById('shops-grid');if(!el)return;
+  const sp=shopProgress();
+  el.innerHTML='<div class="two-col">'+SHOP_MERCHANTS.map(m=>{
+    const cur=Math.min(+sp[m.progress]||0,m.need),unlocked=cur>=m.need;
+    const items=unlocked?getShopSellables(m):[];
+    return `<div class="card ${unlocked?'owned':''}">
+      <div class="card-top"><span class="card-icon">${m.icon}</span><div><div class="card-title">${m.name}</div><div class="card-sub">Compra: ${m.buys}</div></div></div>
+      <div class="card-desc">Desbloqueo: ${m.unlock}</div>
+      <div class="xp-row" style="margin:4px 0 8px"><div class="xp-bar-wrap"><div class="xp-bar" style="width:${Math.min(100,cur/m.need*100)}%"></div></div><div class="xp-label">${cur}/${m.need}</div></div>
+      ${unlocked?(items.length?items.slice(0,8).map((it)=>`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:0.5px solid rgba(255,255,255,0.05)"><span style="flex:1;font-size:10px;color:#c8bfa8">${itemLabel(it.item)}</span><button class="ci-btn" onclick="sellToMerchant('${m.id}','${it.where}',${it.idx})">VENDER +${shopItemValue(it.item)} BP</button></div>`).join(''):'<div style="font-size:9px;color:#3a3028">No tenés productos compatibles en stash o bolsillos.</div>'):'<div class="owned-tag" style="color:#8a6040">🔒 BLOQUEADO</div>'}
+    </div>`;
+  }).join('')+'</div>';
+}
+function countDeclinedChestLoot(){
+  if(!gs||!gs.chests)return;
+  let ammo=0,cons=0;
+  for(const chest of gs.chests){
+    const l=chest&&chest.loot;
+    if(chest&&!chest.taken&&l){if(l.type==='ammo')ammo++;else if(l.type==='consumable')cons++;chest.taken=true;}
+  }
+  if(ammo)addShopProgress('ammoDeclined',ammo);
+  if(cons)addShopProgress('consumableDeclined',cons);
+}
+
 // ═══════════════════════════════════════════════════════════
 // SCREEN MANAGER
 // ═══════════════════════════════════════════════════════════
@@ -1580,13 +1679,15 @@ function showScreen(name){
   document.getElementById('screen-char').classList.toggle('hidden',name!=='char');
   document.getElementById('screen-codex').classList.toggle('hidden',name!=='codex');
   document.getElementById('screen-base').classList.toggle('hidden',name!=='base');
+  document.getElementById('screen-shops').classList.toggle('hidden',name!=='shops');
   document.getElementById('screen-mission').classList.toggle('hidden',name!=='mission');
   document.getElementById('game-ui').classList.toggle('hidden',name!=='game');
   if(name==='menu'){updateMenuInfo();stopGame();}
-  if((name==='mission'||name==='game'||name==='char'||name==='base'||name==='codex')&&!isLoggedIn()){showScreen('auth');setAuthMessage('Tenés que iniciar sesión para ver tu progreso.',true);return;}
+  if((name==='mission'||name==='game'||name==='char'||name==='base'||name==='codex'||name==='shops')&&!isLoggedIn()){showScreen('auth');setAuthMessage('Tenés que iniciar sesión para ver tu progreso.',true);return;}
   if(name==='char')renderCharScreen();
   if(name==='codex')renderCodexScreen();
   if(name==='base')renderBase();
+  if(name==='shops')renderShops();
   if(name==='mission')renderMissionSelect();
   if(name==='game')startGame();
   currentScreen=name;
@@ -3474,6 +3575,7 @@ function pocketToChest(slotIdx){
   renderChestModal();
 }
 function closeChestAndContinue(){
+  countDeclinedChestLoot();
   document.getElementById('chest-modal').classList.add('hidden');
   gs.paused=false;
   // Sync current pockets to loadout (so character screen shows them)
@@ -3483,6 +3585,7 @@ function closeChestAndContinue(){
   advanceWave();
 }
 function advanceWave(){
+  addShopProgress('screensCompleted',1);
   // 1 wave per floor → always advance to next floor
   const p=gs.player;
   const sec=armorStats().secondary;
@@ -3785,11 +3888,11 @@ function fireSingleShot(p,w,ws,angle){
   const dmg=Math.round(w.dmg*(0.9+Math.random()*0.2)*(1+p.stats.str/40)*(daBonus?1+daBonus.dmgBonus:1)*violenceDamageMul()*(1+(_as.dmgPctBonus||0)/100));
   if(w.spread){
     for(let i=0;i<5;i++){const a=angle+(Math.random()-0.5)*0.38;
-      gs.bullets.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:Math.cos(a)*10,vy:Math.sin(a)*10,dmg:Math.round(dmg*0.45),range:w.range,traveled:0,type:'bullet',r:4,color:'#f0e68c'});}
+      gs.bullets.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:Math.cos(a)*10,vy:Math.sin(a)*10,dmg:Math.round(dmg*0.45),range:w.range,traveled:0,type:'bullet',r:4,color:'#f0e68c',weaponType:'firearm'});}
   } else if(w.explosive){
-    gs.bullets.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:Math.cos(angle)*7,vy:Math.sin(angle)*7,dmg,range:w.range,traveled:0,type:'rocket',r:7,color:'#ff8020',explosive:true});
+    gs.bullets.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:Math.cos(angle)*7,vy:Math.sin(angle)*7,dmg,range:w.range,traveled:0,type:'rocket',r:7,color:'#ff8020',explosive:true,weaponType:'firearm'});
   } else {
-    gs.bullets.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:Math.cos(angle)*10,vy:Math.sin(angle)*10,dmg,range:w.range,traveled:0,type:'bullet',r:4,color:'#f0e68c'});
+    gs.bullets.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:Math.cos(angle)*10,vy:Math.sin(angle)*10,dmg,range:w.range,traveled:0,type:'bullet',r:4,color:'#f0e68c',weaponType:'firearm'});
   }
   spawnMuzzleFlash(p.x+p.w/2,p.y+p.h/2,angle);
   return true;
@@ -3808,7 +3911,7 @@ function tryAttack(){
     for(const e of gs.enemies){
       const ex=e.x+e.size/2,ey=e.y+e.size/2;
       if(Math.hypot(ex-(p.x+p.w/2),ey-(p.y+p.h/2))<w.range&&Math.abs(normA(Math.atan2(ey-(p.y+p.h/2),ex-(p.x+p.w/2))-angle))<Math.PI/2.2)
-        {damageEnemy(e,meleeDmg(),true);}
+        {damageEnemy(e,meleeDmg(),true,{weaponType:'melee'});}
     }
     for(const portal of (gs._purgePortals||[])){
       if(!portal.active)continue;
@@ -4020,7 +4123,12 @@ function killEnemy(e,opts={}){
   const noReward=!!opts.noReward;
   const xpGain=noReward?0:Math.round((e.xp+(sec.xpBonus||0))*_xpMul);
   const bpGain=noReward?0:Math.round((e.bp+(sec.bpBonus||0))*_bpMul);
-  if(!noReward){p.freeXP+=xpGain;p.bp+=bpGain;triggerSepulchralEcho(e);codexDiscover('enemies',e.codexId||e.name,'defeated');}
+  if(!noReward){
+    p.freeXP+=xpGain;p.bp+=bpGain;triggerSepulchralEcho(e);codexDiscover('enemies',e.codexId||e.name,'defeated');
+    if(opts.weaponType==='firearm')addShopProgress('firearmKills',1);
+    if(opts.weaponType==='melee')addShopProgress('meleeKills',1);
+    if(e.isCannibal||e.codexId==='canibal')addShopProgress('cannibalsDefeated',1);
+  }
   spawnExplosion(e.x+e.size/2,e.y+e.size/2,18,e.color);
   addLog(noReward?`Sin recompensa — ${e.name}`:`+${xpGain} XP  +${bpGain} BP — ${e.name}`);
   gs.enemies=gs.enemies.filter(x=>x!==e);
@@ -4851,7 +4959,7 @@ function update(dt){
 
         if(!b.hitEnemies||!b.hitEnemies.includes(e)){
           if(b.hitEnemies)b.hitEnemies.push(e);
-          damageEnemy(e,b.dmg,false);if(b.explosive){const er=b.explodeRadius||60;spawnExplosion(b.x,b.y,er,'#ff6000');for(const e2 of [...gs.enemies])if(Math.hypot(b.x-e2.x-e2.size/2,b.y-e2.y-e2.size/2)<er)damageEnemy(e2,Math.round(b.dmg*0.5),false);}
+          damageEnemy(e,b.dmg,false,{weaponType:b.weaponType});if(b.explosive){const er=b.explodeRadius||60;spawnExplosion(b.x,b.y,er,'#ff6000');for(const e2 of [...gs.enemies])if(Math.hypot(b.x-e2.x-e2.size/2,b.y-e2.y-e2.size/2)<er)damageEnemy(e2,Math.round(b.dmg*0.5),false,{weaponType:b.weaponType});}
         }
         if(!b.pierce){hit=true;break;}
       }
@@ -5095,6 +5203,7 @@ function dropVictoryPocket(slotIdx){
 
 function victoryReturnToMenu(){
   if(!_victorySnapshot)return;
+  countDeclinedChestLoot();
   // Persist final loadout from snapshot
   save.loadout=_victorySnapshot.pockets.map(s=>s?{...s}:null);
   save.bp=_victorySnapshot.bp;
