@@ -3417,6 +3417,7 @@ const ENEMY_TYPES=[
   {name:'Caminante',color:'#4a7a3a',eyeColor:'#90cc70',hp:40, dmg:8, speed:0.85,xp:12,bp:8, size:24},
   {name:'Caminante fisible',color:'#4a7a3a',eyeColor:'#90cc70',hp:48, dmg:9, speed:0.9,xp:18,bp:12,size:24,splitOnDeath:true},
   {name:'Corredor', color:'#7a3a3a',eyeColor:'#ff9070',hp:25, dmg:12,speed:1.6, xp:15,bp:10,size:20},
+  {name:'Kamikaze', color:'#8a3a16',eyeColor:'#ffd24a',hp:32,dmg:28,speed:1.85,xp:22,bp:14,size:22,kamikaze:true,detect:190,fuseMs:2600,explodeRadius:86,explosionDmg:70},
   {name:'Gordo',    color:'#3a4a7a',eyeColor:'#70a0ff',hp:120,dmg:20,speed:0.5, xp:35,bp:25,size:36},
   {name:'Mutante',  color:'#6a3a7a',eyeColor:'#ff70d0',hp:70, dmg:15,speed:1.2, xp:28,bp:20,size:28},
   {name:'Espectro', color:'#3a6a7a',eyeColor:'#70ffee',hp:50, dmg:18,speed:1.4, xp:38,bp:28,size:22,ghost:true},
@@ -3425,7 +3426,7 @@ const ENEMY_TYPES=[
 function makeEnemy(t,pos,overrides={}){
   const hp=overrides.hp??(t.hp+gs.floor*10+gs.wave*5);
   const spd=overrides.speed??Math.min(t.speed+gs.floor*0.03+gs.wave*0.01,ENEMY_MAX_SPD);
-  const detect=t.screenDetect?Infinity:100+Math.random()*80;
+  const detect=overrides.detect??(t.detect??(t.screenDetect?Infinity:100+Math.random()*80));
   const mt=gs&&gs.mtype?gs.mtype:{};
   const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1;
   const finalHp=Math.round(hp*hpMul);
@@ -3437,10 +3438,11 @@ function makeEnemy(t,pos,overrides={}){
     dmg:finalDmg,speed:spd,xp:finalXp,bp:overrides.bp??t.bp,
     size:overrides.size??t.size,color:t.color,eyeColor:t.eyeColor,name:overrides.name??t.name,
     ghost:t.ghost||false,screenDetect:t.screenDetect||false,packAura:t.packAura||0,splitOnDeath:overrides.splitOnDeath??(t.splitOnDeath||false),
+    kamikaze:overrides.kamikaze??(t.kamikaze||false),fuseMs:overrides.fuseMs??t.fuseMs,explodeRadius:overrides.explodeRadius??t.explodeRadius,explosionDmg:overrides.explosionDmg??t.explosionDmg,detonating:false,detonateAt:0,
     isCannibal:overrides.isCannibal??(t.isCannibal||false),isBoss:overrides.isBoss??(t.isBoss||false),
     pinkAura:overrides.pinkAura??!!mt.pinkAura,
     attackCd:0,stunTime:0,angle:0,wobble:Math.random()*Math.PI*2,
-    detect:overrides.detect??detect,alerted:overrides.alerted??false,idleAngle:Math.random()*Math.PI*2,idleTimer:0};
+    detect,alerted:overrides.alerted??false,idleAngle:Math.random()*Math.PI*2,idleTimer:0};
 }
 function spawnEnemy(type,opts={}){
   const isCannibal=!opts.noCannibal&&Math.random()<CANNIBAL_SPAWN_CHANCE;
@@ -3916,14 +3918,14 @@ function breakInvisibilityOnEnemyDamage(){
   const invis=gs.player.skills.find(s=>s&&s.id==='invisibilidad'&&s.active&&Date.now()<s.end);
   if(invis){invis.active=false;invis.end=0;addLog('👻 Invisibilidad rota');}
 }
-function damageEnemy(e,dmg,stun){
+function damageEnemy(e,dmg,stun,opts={}){
   breakInvisibilityOnEnemyDamage();
   e.hp-=dmg;if(stun)e.stunTime=Date.now()+280;
   spawnDmgNumber(e.x+e.size/2,e.y,dmg,false);
   spawnBloodParticles(e.x+e.size/2,e.y+e.size/2,e.color);
-  if(e.hp<=0)killEnemy(e);
+  if(e.hp<=0)killEnemy(e,{noReward:!!opts.noReward});
 }
-function killEnemy(e){
+function killEnemy(e,opts={}){
   const p=gs.player;
   const sec=armorStats().secondary;
   const _as2=armorStats();
@@ -3931,15 +3933,39 @@ function killEnemy(e){
   const _destLv=(save.skillLevels&&save.skillLevels['destreza'])||0;
   const _destMul=_destLv>0?(SKILL_DEF.destreza.stats(_destLv).bpMul||1):1;
   const _bpMul=(1+(_as2.bpPctBonus||0)/100)*_destMul;
-  const xpGain=Math.round((e.xp+(sec.xpBonus||0))*_xpMul);
-  const bpGain=Math.round((e.bp+(sec.bpBonus||0))*_bpMul);
-  p.freeXP+=xpGain;p.bp+=bpGain;
-  triggerSepulchralEcho(e);
+  const noReward=!!opts.noReward;
+  const xpGain=noReward?0:Math.round((e.xp+(sec.xpBonus||0))*_xpMul);
+  const bpGain=noReward?0:Math.round((e.bp+(sec.bpBonus||0))*_bpMul);
+  if(!noReward){p.freeXP+=xpGain;p.bp+=bpGain;triggerSepulchralEcho(e);}
   spawnExplosion(e.x+e.size/2,e.y+e.size/2,18,e.color);
-  addLog(`+${xpGain} XP  +${bpGain} BP — ${e.name}`);
+  addLog(noReward?`Sin recompensa — ${e.name}`:`+${xpGain} XP  +${bpGain} BP — ${e.name}`);
   gs.enemies=gs.enemies.filter(x=>x!==e);
   if(gs.mtype&&gs.mtype.id==='defensa'&&Date.now()<(gs._defenseUntil||0))spawnDefenseReplacement();
   if(e.splitOnDeath)spawnSplitWalkers(e);
+  persistRunProgress();
+  tryOpenClearedExit();
+}
+
+
+function explodeKamikaze(e){
+  if(!gs||!gs.enemies.includes(e))return;
+  const p=gs.player,cx=e.x+e.size/2,cy=e.y+e.size/2;
+  const radius=e.explodeRadius||80,dmg=e.explosionDmg||60;
+  spawnExplosion(cx,cy,radius,'#ff7a18');
+  addLog('💥 Kamikaze explotó');
+  const pd=Math.hypot(p.x+p.w/2-cx,p.y+p.h/2-cy);
+  if(pd<radius&&p.invTime<Date.now()){
+    const playerDmg=Math.max(1,Math.round(dmg*(1-pd/radius*0.45)));
+    p.hp-=playerDmg;p.invTime=Date.now()+500;spawnDmgNumber(p.x+p.w/2,p.y,playerDmg,true);
+    if(p.hp<=0){gs.gameOver=true;persistRunProgress();}
+  }
+  gs.enemies=gs.enemies.filter(x=>x!==e);
+  for(const other of [...gs.enemies]){
+    if(other===e)continue;
+    const d=Math.hypot(other.x+other.size/2-cx,other.y+other.size/2-cy);
+    if(d<radius)damageEnemy(other,Math.round(dmg*(1-d/radius*0.35)),false,{noReward:true});
+  }
+  if(gs.mtype&&gs.mtype.id==='defensa'&&Date.now()<(gs._defenseUntil||0))spawnDefenseReplacement();
   persistRunProgress();
   tryOpenClearedExit();
 }
@@ -4661,6 +4687,8 @@ function update(dt){
     }
     if(e.alerted&&dist>500&&!targetGolem&&!e.isCannibal) e.alerted=false; // lose track
     if(e.alerted){
+      if(e.kamikaze&&!e.detonating){e.detonating=true;e.detonateAt=now+(e.fuseMs||2600);addLog('⚠ Kamikaze activado');}
+      if(e.kamikaze&&e.detonating&&now>=e.detonateAt){explodeKamikaze(e);continue;}
       e.angle=Math.atan2(edy,edx);
       if(dist>1){const mvx=(edx/dist)*e.speed,mvy=(edy/dist)*e.speed,enx=e.x+mvx,eny=e.y+mvy;
         if(e.ghost){e.x=enx;e.y=eny;}
@@ -4840,6 +4868,11 @@ function draw(){
     const er=e.size*0.18;const ex1=Math.cos(e.angle-0.5)*e.size*0.25,ey1=Math.sin(e.angle-0.5)*e.size*0.25;const ex2=Math.cos(e.angle+0.5)*e.size*0.25,ey2=Math.sin(e.angle+0.5)*e.size*0.25;
     ctx.fillStyle=e.eyeColor;ctx.beginPath();ctx.arc(ex1,ey1,er,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(ex2,ey2,er,0,Math.PI*2);ctx.fill();
     if(e.isCannibal){ctx.fillStyle='#ffb080';ctx.font='8px Courier New';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('CANÍBAL',0,-e.size/2-10);}
+    if(e.kamikaze){
+      const fuse=e.detonating&&e.detonateAt?Math.max(0,(e.detonateAt-now2)/(e.fuseMs||2600)):1;
+      ctx.strokeStyle=`rgba(255,120,24,${0.45+Math.sin(now2*0.02)*0.25})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,e.size*0.75,0,Math.PI*2*(1-fuse));ctx.stroke();
+      ctx.fillStyle='#ffd24a';ctx.font='8px Courier New';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(e.detonating?'BOOM':'KAM',0,-e.size/2-10);
+    }
     if(e.hp<e.maxHp){const bw=e.size+4;ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(-bw/2,-e.size/2-8,bw,4);ctx.fillStyle=e.hp/e.maxHp>0.5?'#3a9a3a':e.hp/e.maxHp>0.25?'#c8a020':'#c03020';ctx.fillRect(-bw/2,-e.size/2-8,bw*(e.hp/e.maxHp),4);}
     ctx.globalAlpha=1;ctx.restore();
   }
