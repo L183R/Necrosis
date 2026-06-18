@@ -4362,6 +4362,20 @@ function renderBaseShape(shape){
     [...row].map(cell=>`<span class="structure-shape-cell ${cell===BASE_FILLED_SHAPE_CELL?'filled':''}" title="${cell===BASE_FILLED_SHAPE_CELL?'estructura':'vacío'}"></span>`)
   ).join('')}</div>`;
 }
+function structureCellCount(shape){
+  return normalizeBaseShape(shape).reduce((total,row)=>total+[...row].filter(cell=>cell===BASE_FILLED_SHAPE_CELL).length,0);
+}
+function buildingHpAtLevel(buildingId,level=1,shape){
+  const b=BASE_BUILDINGS[buildingId];
+  if(!b)return 0;
+  const lv=Math.max(1,level||1);
+  const structureCells=structureCellCount(shape||b.shape);
+  const baseCost=Math.max(1,b.cost(1));
+  const levelCost=Math.max(1,b.cost(lv));
+  // BP is a reference, not a linear HP scaler: square roots keep expensive buildings tougher
+  // without making HP proportional to BP cost. Footprint and level remain direct contributors.
+  return Math.round(100+(structureCells*25)+(lv*60)+(Math.sqrt(baseCost)*10)+(Math.sqrt(levelCost)*12));
+}
 function shapeForSave(buildingId){
   return normalizeBaseShape(BASE_BUILDINGS[buildingId]?.shape);
 }
@@ -4424,6 +4438,7 @@ function renderBase(){
           <div><div class="card-title">${b.name}</div>
           <div class="card-sub">${isMax?'Nivel máximo':'Nivel '+slot.level}</div></div></div>
         <div style="font-size:9px;color:#5a5248">${b.benefit(slot.level)}</div>
+        <div style="font-size:9px;color:#8adc8a;margin-top:2px">HP edificio: ${buildingHpAtLevel(slot.buildingId,slot.level,slot.shape)}</div>
         <div class="structure-shape-row">${renderBaseShape(slot.shape||b.shape)}<div class="structure-shape-label">Forma 4×4<br>x vacío · o estructura</div></div>
         ${extra}
         ${isMax?'<div class="owned-tag">MÁXIMO</div>'
@@ -4468,7 +4483,7 @@ function openBuildMenu(slotIdx){
     +opts.map(b=>{
       const can=save.bp>=b.cost(1);
       return `<button class="action-btn" style="margin-bottom:5px;font-size:9px" onclick="buildSlot(${slotIdx},'${b.id}')" ${can?'':' disabled'}>
-        <span>${b.icon} ${b.name}</span><br><span style="opacity:0.6">${b.cost(1)} BP — ${b.desc}</span>
+        <span>${b.icon} ${b.name}</span><br><span style="opacity:0.6">${b.cost(1)} BP — HP ${buildingHpAtLevel(b.id,1,b.shape)} — ${b.desc}</span>
         <span class="structure-shape-row" style="justify-content:center">${renderBaseShape(b.shape)}<span class="structure-shape-label">4×4</span></span></button>`;
     }).join('')
     +`<button class="action-btn" style="margin-top:4px;font-size:9px;opacity:0.5" onclick="renderBase()">CANCELAR</button>`;
