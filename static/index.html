@@ -150,6 +150,13 @@ canvas{display:block;position:fixed;inset:0}
   font-size:9px;color:#c8bfa8;width:200px;pointer-events:none;line-height:1.5}
 .att-opt:hover .att-tip{display:block}
 
+
+.structure-shape{display:grid;grid-template-columns:repeat(4,9px);gap:2px;margin-top:7px;align-items:center}
+.structure-shape-cell{width:9px;height:9px;border-radius:1px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.04)}
+.structure-shape-cell.filled{background:rgba(192,160,96,0.72);border-color:rgba(240,230,208,0.22);box-shadow:0 0 4px rgba(192,160,96,0.25)}
+.structure-shape-row{display:flex;align-items:center;gap:7px;margin-top:7px}
+.structure-shape-label{font-size:8px;color:#3a3028;letter-spacing:1px;text-transform:uppercase}
+
 #screen-codex{background:#0d0d12;overflow-y:auto;padding:32px 24px;align-items:stretch;justify-content:flex-start}
 .codex-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 18px}
 .codex-tab{padding:8px 12px;border:1px solid rgba(255,255,255,0.1);background:#0b0a0f;color:#6f6658;font-family:'Courier New',monospace;font-size:9px;letter-spacing:2px;cursor:pointer;text-transform:uppercase;border-radius:3px}
@@ -4278,10 +4285,13 @@ function spawnDmgNumber(x,y,val,isPlayer){
 // ═══════════════════════════════════════════════════════════
 // BASE
 // ═══════════════════════════════════════════════════════════
+const BASE_EMPTY_SHAPE_CELL='x';
+const BASE_FILLED_SHAPE_CELL='o';
 const BASE_BUILDINGS={
   taller_mecanico:{
     id:'taller_mecanico',name:'Taller Mecánico',icon:'🔧',
     desc:'Gestiona vehículos. Máx 1 taller. +1 plaza de vehículo por nivel.',
+    shape:['xxox','xooo','xooo','xxox'],
     maxLevel:5,unique:true,
     cost:lv=>Math.round(1000*Math.pow(2,lv)),
     benefit:lv=>`Nivel ${lv} — ${2+lv} vehículos máx`,
@@ -4289,6 +4299,7 @@ const BASE_BUILDINGS={
   taller_armas:{
     id:'taller_armas',name:'Taller de Armas',icon:'⚒️',
     desc:'Mejora drops de accesorios. Múltiples instancias y niveles se suman.',
+    shape:['xxxx','oooo','xooo','xxxx'],
     maxLevel:10,
     cost:lv=>1000*lv,
     benefit:lv=>`Nivel ${lv} — drop accesorios ×${Math.round(Math.pow(1.1,lv)*100)/100}`,
@@ -4296,6 +4307,7 @@ const BASE_BUILDINGS={
   taller_armaduras:{
     id:'taller_armaduras',name:'Taller de Armaduras',icon:'🛡',
     desc:'Instala modificaciones en armaduras. Más niveles = más drops de mods.',
+    shape:['xoox','oooo','oooo','xxxx'],
     maxLevel:10,
     cost:lv=>1000*lv,
     benefit:lv=>`Nivel ${lv} — drops de mods ×${Math.round(Math.pow(1.1,lv)*100)/100}`,
@@ -4303,6 +4315,7 @@ const BASE_BUILDINGS={
   fabrica_zombibots:{
     id:'fabrica_zombibots',name:'Fábrica de Zombibots',icon:'🤖',
     desc:'(Efecto próximamente) Coste: 4000×1.25^Nv.',
+    shape:['oooo','oooo','xooo','xxox'],
     maxLevel:10,
     cost:lv=>Math.round(4000*Math.pow(1.25,lv)),
     benefit:lv=>`Nivel ${lv} — efecto próximamente`,
@@ -4310,6 +4323,7 @@ const BASE_BUILDINGS={
   fabrica_municion:{
     id:'fabrica_municion',name:'Fábrica de Municiones',icon:'🏭',
     desc:'Carga cajas de munición vacías gradualmente. Coste: 1000×2^Nv actual.',
+    shape:['xxxx','oooo','oooo','xoxo'],
     maxLevel:10,unique:false,
     cost:lv=>1000*Math.pow(2,lv),
     benefit:lv=>`Nivel ${lv} — carga precio/(10×${lv}) min por caja`,
@@ -4317,6 +4331,7 @@ const BASE_BUILDINGS={
   alojamiento:{
     id:'alojamiento',name:'Alojamiento',icon:'🏠',
     desc:'Capacidad para trabajadores reclutados. 2 trabajadores por nivel.',
+    shape:['xxxx','xooo','xooo','xxxx'],
     maxLevel:10,
     cost:lv=>500*(lv+1),
     benefit:lv=>`Nivel ${lv} — ${lv*2} trabajadores`,
@@ -4324,12 +4339,26 @@ const BASE_BUILDINGS={
   mina:{
     id:'mina',name:'Mina de BP',icon:'⛏️',
     desc:'Genera BP con el tiempo. Nivel n cuesta 1000×n².',
+    shape:['xxxx','xoox','xoox','xxxx'],
     maxLevel:10,
     cost:lv=>1000*lv*lv,
     benefit:lv=>`${MINE_BASE_BP_PER_HOUR*lv} BP/h base (+${MINE_WORKER_BP_PER_HOUR} BP/h por trabajador)`,
     rate:lv=>(MINE_BASE_BP_PER_HOUR*lv)/60, // BP per minute per level
   },
 };
+function normalizeBaseShape(shape){
+  const rows=Array.isArray(shape)?shape.slice(0,4):[];
+  while(rows.length<4)rows.push('xxxx');
+  return rows.map(row=>(String(row||'').toLowerCase().replace(/[^xo]/g,BASE_EMPTY_SHAPE_CELL)+BASE_EMPTY_SHAPE_CELL.repeat(4)).slice(0,4));
+}
+function renderBaseShape(shape){
+  return `<div class="structure-shape" aria-label="Forma 4x4">${normalizeBaseShape(shape).flatMap(row=>
+    [...row].map(cell=>`<span class="structure-shape-cell ${cell===BASE_FILLED_SHAPE_CELL?'filled':''}" title="${cell===BASE_FILLED_SHAPE_CELL?'estructura':'vacío'}"></span>`)
+  ).join('')}</div>`;
+}
+function shapeForSave(buildingId){
+  return normalizeBaseShape(BASE_BUILDINGS[buildingId]?.shape);
+}
 const BASE_SLOTS=16;
 
 function renderBase(){
@@ -4389,6 +4418,7 @@ function renderBase(){
           <div><div class="card-title">${b.name}</div>
           <div class="card-sub">${isMax?'Nivel máximo':'Nivel '+slot.level}</div></div></div>
         <div style="font-size:9px;color:#5a5248">${b.benefit(slot.level)}</div>
+        <div class="structure-shape-row">${renderBaseShape(slot.shape||b.shape)}<div class="structure-shape-label">Forma 4×4<br>x vacío · o estructura</div></div>
         ${extra}
         ${isMax?'<div class="owned-tag">MÁXIMO</div>'
           :`<button class="action-btn" onclick="upgradeSlot(${i})" ${canUp?'':' disabled'}>
@@ -4432,7 +4462,8 @@ function openBuildMenu(slotIdx){
     +opts.map(b=>{
       const can=save.bp>=b.cost(1);
       return `<button class="action-btn" style="margin-bottom:5px;font-size:9px" onclick="buildSlot(${slotIdx},'${b.id}')" ${can?'':' disabled'}>
-        ${b.icon} ${b.name}<br><span style="opacity:0.6">${b.cost(1)} BP — ${b.desc}</span></button>`;
+        <span>${b.icon} ${b.name}</span><br><span style="opacity:0.6">${b.cost(1)} BP — ${b.desc}</span>
+        <span class="structure-shape-row" style="justify-content:center">${renderBaseShape(b.shape)}<span class="structure-shape-label">4×4</span></span></button>`;
     }).join('')
     +`<button class="action-btn" style="margin-top:4px;font-size:9px;opacity:0.5" onclick="renderBase()">CANCELAR</button>`;
 }
@@ -4449,7 +4480,7 @@ function buildSlot(slotIdx,buildingId){
   if(save.bp<cost){alert('BP insuficientes');return;}
   if(save.base[slotIdx]){alert('Este lote ya tiene una construcción');return;}
   save.bp-=cost;
-  save.base[slotIdx]={buildingId,level:1,lastCollect:Date.now(),pendingBP:0};
+  save.base[slotIdx]={buildingId,level:1,lastCollect:Date.now(),pendingBP:0,shape:shapeForSave(buildingId)};
   writeSave();renderBase();
 }
 
