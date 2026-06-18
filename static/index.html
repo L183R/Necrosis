@@ -219,6 +219,8 @@ canvas{display:block;position:fixed;inset:0}
     </div>
     <div class="sec-title">Bolsillos — configurar loadout para el próximo nivel</div>
     <div id="char-loadout-section"></div>
+    <div class="sec-title">Arquetipos — rutas recomendadas</div>
+    <div id="char-archetypes-grid"></div>
     <div class="sec-title">Magias — elegir y mejorar</div>
     <div id="char-skills-grid"></div>
     <div class="sec-title">Armaduras — equipar</div>
@@ -500,6 +502,8 @@ const WEAPON_CAT=[
   {id:'cuchillo',  name:'Cuchillo',        type:'melee',icon:'🔪',dmg:18,range:52, speed:280, cost:0},
   {id:'hacha',     name:'Hacha',           type:'melee',icon:'🪓',dmg:30,range:58, speed:380, cost:120},
   {id:'katana',    name:'Katana',          type:'melee',icon:'⚔️',dmg:44,range:66, speed:260, cost:350},
+  {id:'tanto',     name:'Tantō Ninja',     type:'melee',icon:'🗡️',dmg:34,range:58, speed:180, cost:420},
+  {id:'daga_saqueo',name:'Daga de Saqueo', type:'melee',icon:'🗡️',dmg:24,range:54, speed:170, cost:460},
   {id:'sierra',    name:'Motosierra',      type:'melee',icon:'🔧',dmg:24,range:50, speed:190, cost:500},
   // Range
   {id:'pistola',   name:'Pistola',         type:'range',icon:'🔫',dmg:26, range:280,speed:480, cost:0,
@@ -523,6 +527,12 @@ const WEAPON_CAT=[
   {id:'rifle_francotirador',name:'Rifle de Caza',type:'range',icon:'🔭',dmg:65,range:550,speed:800,cost:380,
    caliber:'762',  magSize:10,reload:2600,soundRadius:500, fireMode:'single',
    defaultAtts:{boca:'boca_estandar',canon:'canon_estandar',mecanismo:'mecanismo_estandar',cargador:'cargador_estandar',culata:'culata_estandar',mira:'mira_abierta'}},
+  {id:'rifle_bisonte',name:'Rifle Bisonte',type:'range',icon:'🔭',dmg:140,range:820,speed:1850,cost:950,
+   caliber:'762',  magSize:3, reload:3400,soundRadius:620, fireMode:'single',
+   defaultAtts:{boca:'boca_estandar',canon:'canon_precision',mecanismo:'mecanismo_estandar',cargador:'cargador_estandar',culata:'culata_estandar',mira:'mira_optica_x4'}},
+  {id:'carabina_milicia',name:'Carabina Milicia',type:'range',icon:'🔫',dmg:30,range:390,speed:220,cost:520,
+   caliber:'556',  magSize:40,reload:2200,soundRadius:430, fireMode:'auto',
+   defaultAtts:{boca:'boca_estandar',canon:'canon_estandar',mecanismo:'mecanismo_automatico',cargador:'cargador_estandar',culata:'culata_estandar',mira:'mira_abierta'}},
   {id:'lanzacohetes',name:'Lanzacohetes',  type:'range',icon:'💣',dmg:110,range:260,speed:1600,cost:700,
    caliber:'40mm', magSize:4, reload:3000,soundRadius:400, fireMode:'single', explosive:true,
    defaultAtts:{boca:'tobera_cohete_estandar',canon:'tubo_lanzador_estandar',mecanismo:'disparador_lanzador_estandar',cargador:'carga_individual_estandar',culata:'apoyo_lanzador_estandar',mira:'mira_lanzador_estandar'}},
@@ -551,6 +561,11 @@ const ARMOR_CAT=[
   {id:'exotraje',          name:'Exotraje Improvisado',  icon:'🤖',cost:1500, pockets:5, bonusHp:100, bonusMp:30,  desc:'Late game peleador.'},
   {id:'vestimenta_ocultista',name:'Vestimenta de Ocultista',icon:'🔮',cost:1300,pockets:4,bonusHp:15, bonusMp:120, desc:'Late game mágico.'},
   {id:'equipo_carronero',  name:'Equipo de Carroñero',   icon:'🎒',cost:1400, pockets:10,bonusHp:35,  bonusMp:20,  desc:'Late game lootero.'},
+  {id:'manto_piromante',   name:'Manto de Piromante',    icon:'🔥',cost:900,  pockets:4, bonusHp:20,  bonusMp:140, desc:'Mucho MP para gastar en daño de fuego masivo.'},
+  {id:'placas_bastion',    name:'Placas Bastión',        icon:'🛡️',cost:1250, pockets:3, bonusHp:165, bonusMp:20,  desc:'Tanque pesado: vida, defensa y provocación con tierra.'},
+  {id:'kimono_sombra',     name:'Kimono de Sombra',      icon:'🥷',cost:820,  pockets:6, bonusHp:25,  bonusMp:55,  desc:'Melee ágil combinado con control de aire.'},
+  {id:'habito_sanador',    name:'Hábito Sanador',        icon:'💚',cost:760,  pockets:5, bonusHp:40,  bonusMp:80,  desc:'Sustain de agua para curarse y sostener al equipo.'},
+  {id:'traje_aristocrata', name:'Traje Aristócrata',     icon:'🎩',cost:650,  pockets:6, bonusHp:5,   bonusMp:30,  desc:'Débil en combate; se especializa en obtener BP.'},
 ];
 const aById=id=>ARMOR_CAT.find(a=>a.id===id);
 
@@ -591,6 +606,19 @@ const SEC_LABEL={
   regenHp:v=>`Reg ${v} HP/oleada`,regenMp:v=>`Reg ${v} MP/oleada`,
   itemHpPct:v=>`+${v}% HP de items`,itemMpPct:v=>`+${v}% MP de items`,
 };
+
+const ARCHETYPE_GUIDE=[
+  {name:'Piromante',icon:'🔥',role:'Daño masivo por MP',stats:'INT + MP',gear:'Manto de Piromante + Bola de Fuego/Infierno',desc:'Gasta reservas enormes de MP para limpiar oleadas con explosiones de fuego.'},
+  {name:'Healer',icon:'💚',role:'Sustain personal/equipo',stats:'INT + MP + HP',gear:'Hábito Sanador o Equipo Médico + Curación/Regeneración',desc:'Usa agua para estabilizar peleas largas; ideal en multiplayer visual o runs defensivas.'},
+  {name:'Ninja',icon:'🥷',role:'Melee + control',stats:'AGI + STR + MP',gear:'Tantō Ninja/Katana + Kimono de Sombra + Parálisis/Invisibilidad',desc:'Entra y sale de melee mientras el aire congela, oculta y controla enemigos.'},
+  {name:'Tanque',icon:'🛡️',role:'Vida, defensa y provocación',stats:'HP + RES + MP',gear:'Placas Bastión/Antidisturbios + Escudo/Espinas/Gólem',desc:'Aguanta el frente, atrae amenazas con tierra y compra tiempo para el equipo.'},
+  {name:'Buffer',icon:'🌟',role:'Mejoras de atributos',stats:'INT + MP',gear:'Bata Reforzada + Rayo/Destello/Panorama/Sabiduría',desc:'Potencia ventanas de daño y control con luz; su valor sube cuanto más dura la pelea.'},
+  {name:'Necromante',icon:'💀',role:'Control de mapa a distancia',stats:'INT + MP',gear:'Vestimenta de Ocultista + Pozo/Explosión/Ecos',desc:'Mata desde lejos con zonas oscuras y convierte muertes en presión adicional.'},
+  {name:'Ladrón',icon:'🗡️',role:'Duelos melee y beneficios',stats:'AGI + LUCK',gear:'Daga de Saqueo + Arnés/Equipo de Saqueador',desc:'Se mueve rápido, elige objetivos aislados y prioriza BP/loot sobre daño bruto.'},
+  {name:'Sniper',icon:'🔭',role:'Largo alcance lento',stats:'STR + LUCK',gear:'Francotirador/Rifle Bisonte + 7.62',desc:'Dispara poco, pega durísimo y necesita posicionamiento seguro.'},
+  {name:'Tirador americano',icon:'🇺🇸',role:'Munición abundante',stats:'LUCK + AGI',gear:'Carabina Milicia/Uzi + chalecos con muchos bolsillos',desc:'Su fuerza viene de llevar y encontrar mucha munición para mantener fuego constante.'},
+  {name:'Aristócrata',icon:'🎩',role:'Economía BP',stats:'LUCK + MP',gear:'Traje Aristócrata + mods BP + Destreza',desc:'No brilla peleando, pero acelera la economía para comprar y mejorar antes.'},
+];
 
 // cost(lv): 100*(lv+1)*1.2^lv for A, 200*(lv+1)*1.2^lv for B
 const SC=lv=>Math.round(100*(lv+1)*Math.pow(1.2,lv));
@@ -635,14 +663,14 @@ function skillCostXP(sd,lv){
 const SKILL_DEF={
   // FUEGO
   bola_fuego:{id:'bola_fuego',element:'fuego',variant:'A',name:'Bola de Fuego',icon:'🔥',cast:600,maxLevel:99,
-    mpCost:lv=>Math.min(18,9+lv*0.25),
-    desc:'Proyectil explosivo hacia el cursor.',stats:lv=>({dmg:50+lv*20,radius:48+lv*4,speed:7})},
+    mpCost:lv=>Math.min(42,18+lv*0.55),
+    desc:'Proyectil explosivo caro: consume mucho MP para borrar grupos.',stats:lv=>({dmg:90+lv*32,radius:54+lv*5,speed:7})},
   lanzallamas:{id:'lanzallamas',element:'fuego',variant:'B',name:'Lanzallamas',icon:'🌋',cast:200,maxLevel:99,
     mpCost:lv=>Math.min(15,7+lv*0.20),
     desc:'Daño en cono frontal a corta distancia.',stats:lv=>({dmg:15+lv*10,range:90+lv*10,coneAngle:Math.PI/3})},
   infierno:{id:'infierno',element:'fuego',variant:'C',name:'Infierno',icon:'💀',cast:1200,maxLevel:99,
-    mpCost:lv=>Math.min(45,26+lv*0.50),
-    desc:'Gran daño en área alrededor del personaje. Empuja enemigos.',stats:lv=>({dmg:115+lv*10,radius:100+lv*20,knockback:250})},
+    mpCost:lv=>Math.min(85,44+lv*0.90),
+    desc:'Nova de fuego de coste altísimo: daño masivo en área y empuje.',stats:lv=>({dmg:190+lv*24,radius:120+lv*22,knockback:280})},
   violencia:{id:'violencia',element:'fuego',variant:'D',passive:true,name:'Violencia',icon:'💥',maxLevel:99,
     desc:'PASIVA: +20% al daño de armas permanentemente.',stats:lv=>({weaponDmgBonus:lv*0.20})},
   // TIERRA
@@ -687,10 +715,10 @@ const SKILL_DEF={
     desc:'Rayo de luz que atraviesa enemigos y rebota ilimitadamente en paredes.',stats:lv=>({dmg:5+6*lv,range:400+100*lv,speed:11,bounces:Infinity})},
   destello_luz:{id:'destello_luz',element:'luz',variant:'B',name:'Destello de Luz',icon:'💫',cast:500,maxLevel:99,
     mpCost:lv=>Math.min(26,14+lv*0.25),
-    desc:'Área de efecto que provoca a los enemigos afectados.',stats:lv=>({radius:160+40*lv,duration:2000+lv*800})},
+    desc:'Área de luz que provoca enemigos y abre espacio para proteger aliados.',stats:lv=>({radius:160+40*lv,duration:2000+lv*800})},
   panorama_jubilo:{id:'panorama_jubilo',element:'luz',variant:'C',name:'Panorama de Júbilo',icon:'🌅',cast:700,maxLevel:99,
     mpCost:lv=>Math.min(42,24+lv*0.40),
-    desc:'Buff temporal que aumenta el daño mágico un 30%.',stats:lv=>({magicDmgBonus:0.30,duration:4000+2000*lv})},
+    desc:'Buff temporal de equipo: aumenta el daño mágico un 30% y sostiene rotaciones largas.',stats:lv=>({magicDmgBonus:0.30,duration:4000+2000*lv})},
   sabiduria:{id:'sabiduria',element:'luz',variant:'D',passive:true,name:'Sabiduría',icon:'📖',maxLevel:99,
     desc:'PASIVA: aumenta la duración de los buffs.',stats:lv=>({buffDurationBonus:0.20*lv})},
   // OSCURIDAD
@@ -1499,10 +1527,21 @@ function updateMenuInfo(){
 // ═══════════════════════════════════════════════════════════
 // CHARACTER SCREEN
 // ═══════════════════════════════════════════════════════════
+
+function renderArchetypes(){
+  const el=document.getElementById('char-archetypes-grid');if(!el)return;
+  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">'+ARCHETYPE_GUIDE.map(a=>`<div class="card">
+    <div class="card-top"><span class="card-icon">${a.icon}</span><div><div class="card-title">${a.name}</div><div class="card-sub">${a.role}</div></div></div>
+    <div class="card-stats"><div class="cs">Stats <span>${a.stats}</span></div></div>
+    <div class="card-desc"><b>Equipo:</b> ${a.gear}<br>${a.desc}</div>
+  </div>`).join('')+'</div>';
+}
+
 function renderCharScreen(){
   applyDefaultAtts();
   document.getElementById('char-level-disp').textContent=save.level;
   renderLoadout();
+  renderArchetypes();
   document.getElementById('char-xp-disp').textContent=save.freeXP;
   document.getElementById('char-bp-disp').textContent=save.bp;
   document.getElementById('char-xp-cur').textContent=Math.round(save.xp);
