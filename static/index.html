@@ -847,7 +847,7 @@ const MISSION_TYPES=[
   {id:'horda',      name:'Horda',      icon:'🧟', desc:'Oleada masiva con pocos recursos.',                    color:'#c62828', bc:'rgba(198,40,40,0.4)',   chestMul:0.35, enemyMul:3.5},
   {id:'super_malote',name:'Super Malote',icon:'💗', desc:'Enemigos con aura rosa: doble vida, doble ataque y XP ×3.',     color:'#ff4fb8', bc:'rgba(255,79,184,0.45)', chestMul:1.0,  enemyMul:1.25, enemyHpMul:2, enemyDmgMul:2, enemyXpMul:3, pinkAura:true},
   {id:'cuarentena', name:'Cuarentena', icon:'⏱️', desc:'La zona se vuelve tóxica si tardás demasiado.',          color:'#f9a825', bc:'rgba(249,168,37,0.4)',  chestMul:0.9,  enemyMul:1.25},
-  {id:'apagon',     name:'Apagón',     icon:'🔦', desc:'Visibilidad muy reducida. Peleá pegado a tu cono de luz.', color:'#263238', bc:'rgba(96,125,139,0.45)', chestMul:1.05, enemyMul:1.15},
+  {id:'apagon',     name:'Apagón',     icon:'🔦', desc:'Visibilidad reducida. Peleá dentro de tu cono de luz.', color:'#263238', bc:'rgba(96,125,139,0.45)', chestMul:1.05, enemyMul:1.15},
   {id:'incursion',  name:'Incursión',  icon:'🗺️', desc:'Corrida más larga con recompensas acumuladas.',         color:'#6d4c41', bc:'rgba(109,76,65,0.4)',   chestMul:1.25, enemyMul:1.15},
 ];
 
@@ -4540,10 +4540,12 @@ function drawMissionVisibilityOverlay(){
   if(!gs||!(gs.mtype&&gs.mtype.id==='apagon'))return;
   const p=gs.player;
   const sx=p.x+p.w/2-gs.camera.x,sy=p.y+p.h/2-gs.camera.y;
-  const grd=ctx.createRadialGradient(sx,sy,42,sx,sy,155);
+  // Keep blackout missions playable: the map should stay visible enough to
+  // orient yourself while the area outside the flashlight remains dangerous.
+  const grd=ctx.createRadialGradient(sx,sy,70,sx,sy,230);
   grd.addColorStop(0,'rgba(0,0,0,0)');
-  grd.addColorStop(0.38,'rgba(0,0,0,0.62)');
-  grd.addColorStop(1,'rgba(0,0,0,0.96)');
+  grd.addColorStop(0.55,'rgba(0,0,0,0.38)');
+  grd.addColorStop(1,'rgba(0,0,0,0.86)');
   ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);ctx.restore();
 }
 
