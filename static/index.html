@@ -3061,14 +3061,20 @@ function buildSizedMap(cols,rows){
 // SCENARIOS — affect loot weights per map
 // ═══════════════════════════════════════════════════════════
 const SCENARIO_TYPES=[
-  {id:'casa',          name:'Casa',           icon:'🏠', weight:200, loot:{bp:2}},
-  {id:'tienda_ropa',   name:'Tienda de Ropa', icon:'👕', weight:50,  loot:{armor:2,armor_mod:2}},
-  {id:'tienda_armas',  name:'Tienda de Armas',icon:'🔫', weight:40,  loot:{weapon:2,ammo:2,attachment:2}},
-  {id:'hospital',      name:'Hospital',       icon:'🏥', weight:20,  loot:{consumable:5}},
-  {id:'comisaria',     name:'Comisaría',      icon:'👮', weight:20,  loot:{weapon:5,ammo:5,attachment:5}},
-  {id:'banco',         name:'Banco',          icon:'🏦', weight:20,  loot:{bp:10}},
-  {id:'cuartel',       name:'Cuartel',        icon:'🎖️', weight:10, loot:{weapon:10,ammo:10,attachment:10}},
+  {id:'casa',          name:'Casa',           icon:'🏠', weight:200, loot:{bp:2}, palette:{floor:['#201812','#241c15','#1b1410'], wall:['#2f2218','#3d2b1e','#4c3626'], object:['#6b4930','#4b3222','#9a6a43'], accent:'#c28b5a'}},
+  {id:'tienda_ropa',   name:'Tienda de Ropa', icon:'👕', weight:50,  loot:{armor:2,armor_mod:2}, palette:{floor:['#1a1726','#211b31','#171322'], wall:['#322647','#44315f','#513b70'], object:['#55406f','#3c2c50','#b08ee0'], accent:'#d08cff'}},
+  {id:'tienda_armas',  name:'Tienda de Armas',icon:'🔫', weight:40,  loot:{weapon:2,ammo:2,attachment:2}, palette:{floor:['#181b18','#20251f','#141713'], wall:['#263226','#344334','#425642'], object:['#4f5f48','#303b2d','#9bb26e'], accent:'#a8c06a'}},
+  {id:'hospital',      name:'Hospital',       icon:'🏥', weight:20,  loot:{consumable:5}, palette:{floor:['#142020','#182b2c','#111a1c'], wall:['#1d3a3f','#28525a','#31656f'], object:['#3b666b','#24464c','#9adce2'], accent:'#8fe8f2'}},
+  {id:'comisaria',     name:'Comisaría',      icon:'👮', weight:20,  loot:{weapon:5,ammo:5,attachment:5}, palette:{floor:['#121924','#172233','#0f1420'], wall:['#1d2c45','#273d61','#304a75'], object:['#33486a','#22324d','#7ea4e8'], accent:'#6fa3ff'}},
+  {id:'banco',         name:'Banco',          icon:'🏦', weight:20,  loot:{bp:10}, palette:{floor:['#1f1b10','#272211','#19160c'], wall:['#3b3418','#51461f','#665827'], object:['#6b5a24','#4a3d18','#d6bc55'], accent:'#f0ce58'}},
+  {id:'cuartel',       name:'Cuartel',        icon:'🎖️', weight:10, loot:{weapon:10,ammo:10,attachment:10}, palette:{floor:['#141a11','#1a2315','#10150d'], wall:['#26331e','#354729','#435936'], object:['#4b5b3c','#333f2a','#a0ad70'], accent:'#b8c16c'}},
 ];
+const DEFAULT_SCENARIO_PALETTE={floor:['#1c1816','#201e1c','#191714'],wall:['#1a1a28','#252535','#2a2a3e'],object:['#5a4530','#4a3520','#8a6540'],accent:'#c8a060'};
+
+function scenarioPalette(){
+  const sc=typeof gs!=='undefined'&&gs?gs._scenario:null;
+  return (sc&&sc.palette)||DEFAULT_SCENARIO_PALETTE;
+}
 
 function pickScenario(){
   const total=SCENARIO_TYPES.reduce((s,t)=>s+t.weight,0);
@@ -5021,8 +5027,9 @@ function draw(){
   // Tiles
   for(let y=0;y<mapH();y++)for(let x=0;x<mapW();x++){
     const tx=x*TILE,ty=y*TILE;
-    if(gs.map[y][x]===1){ctx.fillStyle='#1a1a28';ctx.fillRect(tx,ty,TILE,TILE);ctx.fillStyle='#252535';ctx.fillRect(tx+1,ty+1,TILE-2,TILE-2);ctx.fillStyle='#2a2a3e';ctx.fillRect(tx+3,ty+3,TILE-6,TILE-6);}
-    else{ctx.fillStyle=((x+y)%3===0)?'#1c1816':((x*7+y*3)%5===0?'#201e1c':'#191714');ctx.fillRect(tx,ty,TILE,TILE);ctx.strokeStyle='rgba(255,255,255,0.02)';ctx.lineWidth=0.5;ctx.strokeRect(tx,ty,TILE,TILE);}
+    const pal=scenarioPalette();
+    if(gs.map[y][x]===1){ctx.fillStyle=pal.wall[0];ctx.fillRect(tx,ty,TILE,TILE);ctx.fillStyle=pal.wall[1];ctx.fillRect(tx+1,ty+1,TILE-2,TILE-2);ctx.fillStyle=pal.wall[2];ctx.fillRect(tx+3,ty+3,TILE-6,TILE-6);}
+    else{ctx.fillStyle=((x+y)%3===0)?pal.floor[0]:((x*7+y*3)%5===0?pal.floor[1]:pal.floor[2]);ctx.fillRect(tx,ty,TILE,TILE);ctx.strokeStyle='rgba(255,255,255,0.025)';ctx.lineWidth=0.5;ctx.strokeRect(tx,ty,TILE,TILE);}
   }
   // Exit door
   if(gs.exitDoor){
@@ -5037,7 +5044,7 @@ function draw(){
     ctx.restore();
   }
   // Map objects
-  for(const o of gs.mapObjects){ctx.fillStyle=o.type==='crate'?'#5a4530':'#3a3a50';ctx.fillRect(o.x,o.y,28,28);ctx.fillStyle=o.type==='crate'?'#4a3520':'#2a2a40';ctx.fillRect(o.x+2,o.y+2,24,24);ctx.fillStyle=o.type==='crate'?'#8a6540':'#5a5a80';ctx.fillRect(o.x+8,o.y+12,12,2);ctx.fillRect(o.x+13,o.y+7,2,12);}
+  for(const o of gs.mapObjects){const pal=scenarioPalette();ctx.fillStyle=o.type==='crate'?pal.object[0]:'#3a3a50';ctx.fillRect(o.x,o.y,28,28);ctx.fillStyle=o.type==='crate'?pal.object[1]:'#2a2a40';ctx.fillRect(o.x+2,o.y+2,24,24);ctx.fillStyle=o.type==='crate'?pal.object[2]:'#5a5a80';ctx.fillRect(o.x+8,o.y+12,12,2);ctx.fillRect(o.x+13,o.y+7,2,12);}
   // Purge portals
   for(const portal of (gs._purgePortals||[])){
     if(!portal.active)continue;
