@@ -738,7 +738,7 @@ const SKILL_DEF={
     desc:'Refleja parte del daño de los atacantes.',stats:lv=>({reflect:0.20+lv*0.20,duration:5000})},
   golem:{id:'golem',element:'tierra',variant:'C',name:'Gólem',icon:'🪨',cast:1500,maxLevel:99,
     mpCost:lv=>Math.min(50,32+lv*0.40),
-    desc:'Crea una roca que atrae enemigos hasta terminar el piso y hace daño mínimo.',stats:lv=>({dmg:1,speed:0.7})},
+    desc:'Crea una roca que atrae enemigos hasta terminar el piso y hace daño mínimo.',stats:lv=>({dmg:1,speed:0.85})},
   resistencia:{id:'resistencia',element:'tierra',variant:'D',passive:true,name:'Resistencia',icon:'🦴',maxLevel:99,
     desc:'PASIVA: +4 HP máximo por nivel al iniciar partida.',stats:lv=>({bonusHp:lv*4})},
   // AGUA
@@ -750,7 +750,7 @@ const SKILL_DEF={
     desc:'Regenera vida durante un tiempo.',stats:lv=>({healPerSec:7+lv*2,duration:Math.round((4.5+lv*1)*1000)})},
   tsunami:{id:'tsunami',element:'agua',variant:'C',name:'Tsunami',icon:'🌊',cast:2000,maxLevel:99,
     mpCost:lv=>Math.min(55,34+lv*0.60),
-    desc:'Daño doble, pero cada enemigo tiene 50% de probabilidad de ser golpeado.',stats:lv=>({dmg:10+lv*12,hitChance:0.5})},
+    desc:'Oleada global: cada enemigo tiene 50% de probabilidad de ser golpeado.',stats:lv=>({dmg:10+lv*12,hitChance:0.5})},
   dilusion:{id:'dilusion',element:'agua',variant:'D',passive:true,name:'Dilusión',icon:'🧪',maxLevel:99,
     desc:'PASIVA: reduce el tiempo de casteo de las habilidades.',stats:lv=>({castTimeMul:20/(20+lv*2)})},
   // AIRE
@@ -771,16 +771,16 @@ const SKILL_DEF={
     desc:'Rayo de luz que atraviesa enemigos y rebota ilimitadamente en paredes.',stats:lv=>({dmg:5+6*lv,range:400+100*lv,speed:11,bounces:Infinity})},
   destello_luz:{id:'destello_luz',element:'luz',variant:'B',name:'Destello de Luz',icon:'💫',cast:500,maxLevel:99,
     mpCost:lv=>Math.min(26,14+lv*0.25),
-    desc:'Área de luz que provoca enemigos y abre espacio para proteger aliados.',stats:lv=>({radius:160+40*lv,duration:2000+lv*800})},
+    desc:'Área de luz que provoca enemigos y abre espacio para reposicionarte.',stats:lv=>({radius:160+40*lv,duration:2000+lv*800})},
   panorama_jubilo:{id:'panorama_jubilo',element:'luz',variant:'C',name:'Panorama de Júbilo',icon:'🌅',cast:700,maxLevel:99,
     mpCost:lv=>Math.min(42,24+lv*0.40),
-    desc:'Buff temporal de equipo: aumenta el daño mágico un 30% y sostiene rotaciones largas.',stats:lv=>({magicDmgBonus:0.30,duration:4000+2000*lv})},
+    desc:'Buff temporal personal: aumenta el daño mágico un 30% y sostiene rotaciones largas.',stats:lv=>({magicDmgBonus:0.30,duration:4000+2000*lv})},
   sabiduria:{id:'sabiduria',element:'luz',variant:'D',passive:true,name:'Sabiduría',icon:'📖',maxLevel:99,
     desc:'PASIVA: aumenta la duración de los buffs.',stats:lv=>({buffDurationBonus:0.20*lv})},
   // OSCURIDAD
   pozo_sombras:{id:'pozo_sombras',element:'oscuridad',variant:'A',name:'Pozo de Sombras',icon:'🕳️',cast:500,maxLevel:99,
     mpCost:lv=>Math.min(30,14+lv*0.30),
-    desc:'Crea un círculo oscuro que daña a quien lo toque y se destruye al hacer daño.',stats:lv=>({dmg:10+10*lv,radius:48})},
+    desc:'Crea un círculo oscuro que daña enemigos, al jugador o gólems que lo toquen y se destruye al hacer daño.',stats:lv=>({dmg:10+10*lv,radius:48})},
   explosion_vacio:{id:'explosion_vacio',element:'oscuridad',variant:'B',name:'Explosión de Vacío',icon:'⚫',cast:650,maxLevel:99,
     mpCost:lv=>Math.min(38,20+lv*0.35),
     desc:'Atrae a jugadores, enemigos y gólems a la posición del cursor.',stats:lv=>({radius:170,duration:1500+500*lv,pull:5.5})},
@@ -1465,7 +1465,7 @@ function equippedArmor(){
 }
 function armorStats(){
   const a=equippedArmor();
-  const out={pockets:2,bonusHp:0,bonusMp:0,secondary:{},xpPctBonus:0,bpPctBonus:0,speedPctBonus:0,dmgPctBonus:0,lifePctBonus:0,bpLootPct:0,itemPct:0};
+  const out={pockets:2,bonusHp:0,bonusMp:0,secondary:{},xpPctBonus:0,bpPctBonus:0,speedPctBonus:0,dmgPctBonus:0,lifePctBonus:0,bpLootPct:0,itemPct:0,itemHpPct:0,itemMpPct:0};
   if(!a)return out;
   out.pockets=a.pockets||0;
   out.bonusHp=a.bonusHp||0;
@@ -1483,6 +1483,8 @@ function armorStats(){
     else if(m.stat==='lifePctBonus')out.lifePctBonus+=m.value||0;
     else if(m.stat==='bpLootPct')out.bpLootPct+=m.value||0;
     else if(m.stat==='itemPct')out.itemPct+=m.value||0;
+    else if(m.stat==='itemHpPct')out.itemHpPct+=m.value||0;
+    else if(m.stat==='itemMpPct')out.itemMpPct+=m.value||0;
     else if(m.stat==='xpBonus')out.secondary.xpBonus=(out.secondary.xpBonus||0)+(m.value||0);
     else if(m.stat==='bpBonus')out.secondary.bpBonus=(out.secondary.bpBonus||0)+(m.value||0);
     else if(m.stat==='regenHp')out.secondary.regenHp=(out.secondary.regenHp||0)+(m.value||0);
@@ -1496,6 +1498,8 @@ function armorStats(){
   out.lifePctBonus+=out.secondary.lifePctBonus||0;
   out.bpLootPct+=out.secondary.bpLootPct||0;
   out.itemPct+=out.secondary.itemPct||0;
+  out.itemHpPct+=out.secondary.itemHpPct||0;
+  out.itemMpPct+=out.secondary.itemMpPct||0;
   out.pockets=Math.max(1,out.pockets);
   return out;
 }
@@ -3475,14 +3479,16 @@ function useConsumable(){
   const {s:item,i:idx}=cSlots[0];
   if(item.data.hp){
     const _resMul=1+(p.stats.res||0)*0.02;
-    const _itemMul=1+(armorStats().itemPct||0)/100;
+    const _as=armorStats();
+    const _itemMul=1+((_as.itemPct||0)+(_as.itemHpPct||0))/100;
     const _hpHeal=Math.round(item.data.hp*_resMul*_itemMul);
     p.hp=Math.min(p.maxHp,p.hp+_hpHeal);
     addLog(`${item.icon} +${_hpHeal} HP${_resMul>1?' (Res +'+Math.round((_resMul-1)*100)+'%)':''}${_itemMul>1?' (Consumible +'+Math.round((_itemMul-1)*100)+'%)':''}`);
   }
   if(item.data.mp){
     const _resMulMp=1+(p.stats.res||0)*0.02;
-    const _itemMul=1+(armorStats().itemPct||0)/100;
+    const _as=armorStats();
+    const _itemMul=1+((_as.itemPct||0)+(_as.itemMpPct||0))/100;
     const _mpHeal=Math.round(item.data.mp*_resMulMp*_itemMul);
     p.mp=Math.min(p.maxMp,p.mp+_mpHeal);
     addLog(`${item.icon} +${_mpHeal} MP${_resMulMp>1?' (Res +'+Math.round((_resMulMp-1)*100)+'%)':''}${_itemMul>1?' (Consumible +'+Math.round((_itemMul-1)*100)+'%)':''}`);
@@ -4031,9 +4037,9 @@ function useSkill(idx){
       const gpos=findFreePos(24,Math.floor(_cx/TILE),Math.floor(_cy/TILE));
       gs._golems.push({
         x:gpos.x,y:gpos.y,
-        dmg:1,
+        dmg:_snapSkill.dmg||1,
         // El gólem prioriza atraer enemigos y solo inflige daño mínimo.
-        speed:0.85,hp:200,maxHp:200,
+        speed:_snapSkill.speed||0.85,hp:200,maxHp:200,
         active:true,size:24,r:12,color:'#8B6914',
         owner:'local',createdAt:Date.now(),lastHit:0,angle:0,wobble:0
       });
