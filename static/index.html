@@ -166,6 +166,7 @@ canvas{display:block;position:fixed;inset:0}
   <div id="menu-sub">SURVIVAL RPG</div>
   <div id="menu-user-info"></div>
   <button class="menu-btn" onclick="requireAuthToPlay()">▶ JUGAR</button>
+  <button class="menu-btn" onclick="startBossTest()">💀 PROBAR JEFES</button>
   <button class="menu-btn" onclick="requireAuthScreen('char')">◈ PERSONAJE</button>
   <button class="menu-btn" onclick="requireAuthScreen('base')">🏗 BASE</button>
   <button class="menu-btn" onclick="resetSave()" style="margin-top:18px;font-size:10px;opacity:0.5">✕ BORRAR PROGRESO</button>
@@ -931,6 +932,14 @@ function startMission(idx){
   showScreen('game');
 }
 
+function startBossTest(){
+  activeMission={
+    id:'boss_test',name:'Prueba de Jefes',floors:1,mapPool:null,mapSize:{cols:32,rows:22},enemyCount:4,
+    mtype:{id:'boss_test',name:'Prueba de Jefes',chestMul:0,enemyMul:1},
+    scenario:{icon:'💀',name:'Arena de Jefes',loot:{}}
+  };
+  showScreen('game');
+}
 
 // ═══════════════════════════════════════════════════════════
 // ATTACHMENT CATALOGUE
@@ -2768,14 +2777,11 @@ function generateMap(){
   gs.enemies=[];
   gs.cannibalSpawned=false;
   gs.waveCleared=false;
-  const isBossFloor=gs.mtype&&gs.mtype.id==='jefe'&&gs.floor===gs.maxFloors;
+  const isBossFloor=gs.mtype&&['jefe','boss_test'].includes(gs.mtype.id)&&gs.floor===gs.maxFloors;
   if(isBossFloor){
-    // Boss missions add an extra final floor dedicated to the boss.
-    // Do not populate this floor with the regular enemy/chest wave, otherwise
-    // clearing the listed floors could immediately end the mission without ever
-    // spawning the boss.
-    gs.waveEnemyCount=1;
-    spawnBoss();
+    // Boss missions add an extra final floor dedicated to bosses.
+    gs.waveEnemyCount=gs.mtype.id==='boss_test'?4:1;
+    spawnBosses(gs.mtype.id==='boss_test'?['golem','summoner','splitter','teleporter']:null);
     return;
   }
   // Enemy count from mission: floorTiles * density.ratio
@@ -3913,8 +3919,15 @@ function triggerSepulchralEcho(e){
   });
 }
 
-function spawnBoss(){
-  const pos=findFreePos(60,Math.floor(mapW()/2),Math.floor(mapH()/2));
+function spawnBosses(kinds){
+  const list=kinds&&kinds.length?kinds:[['golem','summoner','splitter','teleporter'][Math.floor(Math.random()*4)]];
+  list.forEach((kind,i)=>spawnBoss(kind,i,list.length));
+}
+
+function spawnBoss(kind='golem',index=0,total=1){
+  const cx=Math.floor(mapW()/2),cy=Math.floor(mapH()/2);
+  const ring=total>1?Math.PI*2*index/total:0;
+  const pos=findFreePos(60,cx+Math.round(Math.cos(ring)*5),cy+Math.round(Math.sin(ring)*4));
   const bossHp=300+gs.floor*50;
   const mt=gs&&gs.mtype?gs.mtype:{};
   const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1;
@@ -3924,14 +3937,17 @@ function spawnBoss(){
     hp:finalBossHp,maxHp:finalBossHp,
     dmg:Math.round((35+gs.floor*5)*dmgMul),speed:0.9,
     xp:Math.round(200*xpMul),bp:150,
-    size:56,color:'#8B0000',eyeColor:'#ff0000',
-    name:'JEFE',ghost:false,attackCd:0,stunTime:0,
+    size:kind==='golem'?72:kind==='splitter'?54:kind==='teleporter'?48:56,
+    color:kind==='golem'?'#6b6258':kind==='summoner'?'#6a3a7a':kind==='splitter'?'#1f6f75':'#263c8f',
+    eyeColor:kind==='golem'?'#ffd060':kind==='summoner'?'#ff70d0':kind==='splitter'?'#70ffee':'#80b8ff',
+    name:kind==='golem'?'JEFE GÓLEM':kind==='summoner'?'JEFE INVOCADOR':kind==='splitter'?'JEFE FISIBLE':'JEFE PARPADEANTE',
+    ghost:false,attackCd:0,stunTime:0,
     angle:0,wobble:0,detect:300,alerted:true,idleAngle:0,idleTimer:0,
     pinkAura:!!mt.pinkAura,
-    isBoss:true,
+    isBoss:true,bossKind:kind,lastSummon:Date.now()+2500,lastSplit:Date.now()+3000,splitUntil:0,splitParts:null,lastTeleport:0,
   });
-  showBanner('wave-banner','💀 JEFE DETECTADO — ¡Elímina al jefe!');
-  addLog('💀 Un jefe aparece!');
+  showBanner('wave-banner',total>1?'💀 PRUEBA DE JEFES — cuatro amenazas detectadas':'💀 JEFE DETECTADO — ¡Elímina al jefe!');
+  addLog('💀 '+(total>1?'Jefes de prueba desplegados': 'Un jefe aparece: '+kind));
 }
 
 // checkLevelUp removed — XP goes directly to freeXP for magic upgrades
@@ -4436,6 +4452,57 @@ function drawShadowMagic(){
   }
 }
 
+function safeBossTeleport(e){
+  const pos=findSpawnPosFarFromPlayer(e.size,240);
+  spawnExplosion(e.x+e.size/2,e.y+e.size/2,34,'#80b8ff');
+  e.x=pos.x;e.y=pos.y;e.alerted=true;
+  spawnExplosion(e.x+e.size/2,e.y+e.size/2,34,'#80b8ff');
+  addLog('🌀 El jefe parpadeante se teletransporta');
+}
+
+function updateBossAbilities(now){
+  if(!gs||!gs.enemies)return;
+  const p=gs.player;
+  for(const e of gs.enemies){
+    if(!e.isBoss)continue;
+    if(e.bossKind==='summoner'&&now-(e.lastSummon||0)>=6000){
+      e.lastSummon=now;
+      const maxT=Math.min(ENEMY_TYPES.length-1,Math.floor((gs?gs.floor:1)/2)+2);
+      for(let i=0;i<2;i++){
+        const pos=findFreePos(24,Math.floor((e.x+e.size/2)/TILE),Math.floor((e.y+e.size/2)/TILE));
+        spawnEnemy(Math.floor(Math.random()*(maxT+1)),{pos,noCannibal:true});
+      }
+      spawnExplosion(e.x+e.size/2,e.y+e.size/2,36,'#bd70ff');
+      addLog('🧬 El jefe invocador arroja enemigos');
+    }
+    if(e.bossKind==='splitter'){
+      if(!e.splitParts&&now-(e.lastSplit||0)>=7000){
+        const angle=Math.atan2(p.y+p.h/2-e.y-e.size/2,p.x+p.w/2-e.x-e.size/2);
+        e.splitUntil=now+2500;e.lastSplit=now;e.hiddenSplit=true;
+        e.splitParts=[-Math.PI/4,Math.PI/4].map((off,i)=>({
+          x:e.x,y:e.y,vx:Math.cos(angle+off)*2.4,vy:Math.sin(angle+off)*2.4,size:e.size*0.56,hp:e.hp/2,color:e.color,eyeColor:e.eyeColor,wobble:Math.random()*6,idx:i
+        }));
+        spawnExplosion(e.x+e.size/2,e.y+e.size/2,30,'#70ffee');
+        addLog('🧫 El jefe fisible se divide a 45°');
+      }
+      if(e.splitParts){
+        for(const part of e.splitParts){
+          const nx=part.x+part.vx,ny=part.y+part.vy;
+          if(!isWall(nx+2,part.y+2,true)&&!isWall(nx+part.size-2,part.y+2,true))part.x=nx; else part.vx*=-1;
+          if(!isWall(part.x+2,ny+2,true)&&!isWall(part.x+part.size-2,ny+2,true))part.y=ny; else part.vy*=-1;
+        }
+        if(now>=e.splitUntil){
+          const ax=e.splitParts.reduce((sum,pt)=>sum+pt.x,0)/e.splitParts.length;
+          const ay=e.splitParts.reduce((sum,pt)=>sum+pt.y,0)/e.splitParts.length;
+          e.x=ax;e.y=ay;e.hiddenSplit=false;e.splitParts=null;
+          spawnExplosion(e.x+e.size/2,e.y+e.size/2,34,'#70ffee');
+          addLog('🧫 El jefe fisible se fusiona otra vez');
+        }
+      }
+    }
+  }
+}
+
 function update(dt){
   const p=gs.player,now=Date.now();
   let dx=0,dy=0;
@@ -4510,6 +4577,7 @@ function update(dt){
   }
   updateGolems(now);
   updateShadowMagic(now);
+  updateBossAbilities(now);
   // Enemies
   // Noise: player adds noise when shooting or moving fast
   const shotNoise=(now-(gs.lastShotTime||0)<500)?(gs.lastShotRadius||0):0;
@@ -4519,7 +4587,7 @@ function update(dt){
     (gs.keys['KeyW']||gs.keys['ArrowUp']||gs.keys['KeyS']||gs.keys['ArrowDown'])?1:0)>0?60:0));
 
   for(const e of gs.enemies){
-    e.wobble+=0.08;if(e.stunTime>now)continue;
+    e.wobble+=0.08;if(e.hiddenSplit)continue;if(e.stunTime>now)continue;
     let px=p.x+p.w/2,py=p.y+p.h/2,ex=e.x+e.size/2,ey=e.y+e.size/2;
     let cannibalPrey=null;
     if(e.isCannibal){
@@ -4615,7 +4683,19 @@ function update(dt){
       }
     }
     if(!hit)for(let j=gs.enemies.length-1;j>=0;j--){const e=gs.enemies[j];
+      if(e.hiddenSplit&&e.splitParts){
+        for(const part of e.splitParts){
+          if(Math.hypot(b.x-part.x-part.size/2,b.y-part.y-part.size/2)<part.size/2+b.r){
+            e.hp-=b.dmg;spawnDmgNumber(part.x+part.size/2,part.y,b.dmg,false);spawnBloodParticles(part.x+part.size/2,part.y+part.size/2,e.color);
+            if(e.hp<=0){killEnemy(e);} hit=!b.pierce;break;
+          }
+        }
+        if(hit)break;
+        continue;
+      }
       if(Math.hypot(b.x-e.x-e.size/2,b.y-e.y-e.size/2)<e.size/2+b.r){
+        if(e.bossKind==='teleporter'&&Date.now()-(e.lastTeleport||0)>=5000){e.lastTeleport=Date.now();safeBossTeleport(e);hit=true;break;}
+
         if(!b.hitEnemies||!b.hitEnemies.includes(e)){
           if(b.hitEnemies)b.hitEnemies.push(e);
           damageEnemy(e,b.dmg,false);if(b.explosive){const er=b.explodeRadius||60;spawnExplosion(b.x,b.y,er,'#ff6000');for(const e2 of [...gs.enemies])if(Math.hypot(b.x-e2.x-e2.size/2,b.y-e2.y-e2.size/2)<er)damageEnemy(e2,Math.round(b.dmg*0.5),false);}
@@ -4703,6 +4783,17 @@ function draw(){
       ctx.beginPath();ctx.arc(0,0,e.size*0.78+Math.sin(now2*0.004+e.wobble)*3,0,Math.PI*2);
       ctx.fillStyle=`rgba(255,79,184,${pulse})`;ctx.fill();
       ctx.strokeStyle='rgba(255,170,220,0.85)';ctx.lineWidth=2;ctx.stroke();
+    }
+    if(e.hiddenSplit&&e.splitParts){
+      ctx.restore();
+      for(const part of e.splitParts){
+        ctx.save();ctx.translate(part.x+part.size/2,part.y+part.size/2);
+        ctx.beginPath();ctx.ellipse(0,part.size/2-2,part.size*0.45,4,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.35)';ctx.fill();
+        ctx.beginPath();ctx.ellipse(Math.sin(now2*0.01+part.idx)*2,0,part.size/2,part.size/2+2,0,0,Math.PI*2);ctx.fillStyle=part.color;ctx.fill();
+        ctx.fillStyle=part.eyeColor;ctx.beginPath();ctx.arc(-part.size*0.15,-2,part.size*0.12,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(part.size*0.15,-2,part.size*0.12,0,Math.PI*2);ctx.fill();
+        ctx.restore();
+      }
+      continue;
     }
     ctx.beginPath();ctx.ellipse(0,e.size/2-2,e.size*0.45,5,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fill();
     ctx.beginPath();ctx.ellipse(Math.sin(wb)*2,Math.cos(wb*0.7),e.size/2,e.size/2+3,0,0,Math.PI*2);ctx.fillStyle=e.color;ctx.fill();
