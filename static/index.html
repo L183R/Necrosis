@@ -166,6 +166,7 @@ canvas{display:block;position:fixed;inset:0}
   <div id="menu-sub">SURVIVAL RPG</div>
   <div id="menu-user-info"></div>
   <button class="menu-btn" onclick="requireAuthToPlay()">▶ JUGAR</button>
+  <button class="menu-btn" onclick="startBossTest()">💀 PROBAR JEFES</button>
   <button class="menu-btn" onclick="showScreen('char')">◈ PERSONAJE</button>
   <button class="menu-btn" onclick="showScreen('base')">🏗 BASE</button>
   <button class="menu-btn" onclick="resetSave()" style="margin-top:18px;font-size:10px;opacity:0.5">✕ BORRAR PROGRESO</button>
@@ -881,6 +882,16 @@ function renderMissionSelect(){
       </button>`;
     el.appendChild(card);
   });
+}
+
+
+function startBossTest(){
+  activeMission={
+    id:'boss_test',icon:'💀',floors:4,mapPool:null,mapSize:{cols:25,rows:18},density:DENSITIES[1],scenario:SCENARIO_TYPES[0],enemyCount:1,
+    mtype:{id:'jefe',name:'Prueba de Jefes',icon:'💀',desc:'Prueba los cuatro jefes especiales.',chestMul:0,enemyMul:1,bossTest:true},
+    color:'#b71c1c',borderColor:'rgba(183,28,28,0.55)',detail:['Prueba de jefes','4 pisos','Un jefe distinto por piso']
+  };
+  showScreen('game');
 }
 
 function startMission(idx){
@@ -2752,7 +2763,7 @@ function generateMap(){
   gs.enemies=[];
   gs.cannibalSpawned=false;
   gs.waveCleared=false;
-  const isBossFloor=gs.mtype&&gs.mtype.id==='jefe'&&gs.floor===gs.maxFloors;
+  const isBossFloor=gs.mtype&&gs.mtype.id==='jefe'&&(gs.floor===gs.maxFloors||gs.mtype.bossTest);
   if(isBossFloor){
     // Boss missions add an extra final floor dedicated to the boss.
     // Do not populate this floor with the regular enemy/chest wave, otherwise
@@ -3897,25 +3908,78 @@ function triggerSepulchralEcho(e){
   });
 }
 
-function spawnBoss(){
-  const pos=findFreePos(60,Math.floor(mapW()/2),Math.floor(mapH()/2));
+const BOSS_TYPES=[
+  {id:'golem',name:'JEFE GÓLEM',color:'#6f5a2a',eyeColor:'#ffd060',hpMul:1.45,dmgMul:1.25,speed:0.58,size:72,detect:360,desc:'Tanque lento con mucha vida.'},
+  {id:'invocador',name:'JEFE INVOCADOR',color:'#315c35',eyeColor:'#b6ff70',hpMul:1.0,dmgMul:0.95,speed:0.82,size:58,detect:330,spawnEvery:5000,desc:'Arroja enemigos aleatorios cada cierto tiempo.'},
+  {id:'fragmentado',name:'JEFE FRAGMENTADO',color:'#5b3478',eyeColor:'#ff9cff',hpMul:1.05,dmgMul:1.0,speed:0.95,size:60,detect:330,splitEvery:8000,splitDuration:3200,desc:'Se divide en partes a 45° y luego se fusiona.'},
+  {id:'teleportador',name:'JEFE TELEPORTADOR',color:'#1f5f78',eyeColor:'#80f0ff',hpMul:0.9,dmgMul:1.05,speed:1.05,size:54,detect:380,teleportCd:5000,desc:'Se teletransporta para escapar de disparos.'},
+];
+function bossTypeForCurrentFloor(){
+  if(gs&&gs.mtype&&gs.mtype.bossTest)return BOSS_TYPES[(gs.floor-1)%BOSS_TYPES.length];
+  return BOSS_TYPES[Math.floor(Math.random()*BOSS_TYPES.length)];
+}
+function makeBossEntity(bt,pos,overrides={}){
   const bossHp=300+gs.floor*50;
   const mt=gs&&gs.mtype?gs.mtype:{};
-  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1;
-  const finalBossHp=Math.round(bossHp*hpMul);
-  gs.enemies.push({
-    x:pos.x,y:pos.y,
-    hp:finalBossHp,maxHp:finalBossHp,
-    dmg:Math.round((35+gs.floor*5)*dmgMul),speed:0.9,
-    xp:Math.round(200*xpMul),bp:150,
-    size:56,color:'#8B0000',eyeColor:'#ff0000',
-    name:'JEFE',ghost:false,attackCd:0,stunTime:0,
-    angle:0,wobble:0,detect:300,alerted:true,idleAngle:0,idleTimer:0,
-    pinkAura:!!mt.pinkAura,
-    isBoss:true,
-  });
-  showBanner('wave-banner','💀 JEFE DETECTADO — ¡Elímina al jefe!');
-  addLog('💀 Un jefe aparece!');
+  const hpMul=(mt.enemyHpMul||1)*(bt.hpMul||1),dmgMul=(mt.enemyDmgMul||1)*(bt.dmgMul||1),xpMul=mt.enemyXpMul||1;
+  const finalBossHp=Math.round((overrides.hp??bossHp)*hpMul);
+  return {
+    x:pos.x,y:pos.y,hp:finalBossHp,maxHp:finalBossHp,
+    dmg:Math.round((35+gs.floor*5)*dmgMul),speed:bt.speed||0.9,
+    xp:Math.round(200*xpMul),bp:150,size:bt.size||56,color:bt.color,eyeColor:bt.eyeColor,
+    name:bt.name,ghost:false,attackCd:0,stunTime:0,angle:0,wobble:0,detect:bt.detect||300,alerted:true,idleAngle:0,idleTimer:0,
+    pinkAura:!!mt.pinkAura,isBoss:true,bossType:bt.id,bossDesc:bt.desc,lastSpecial:Date.now(),lastTeleport:0,splitUntil:0,splitParts:[],hidden:false,
+    ...overrides,
+  };
+}
+function spawnBoss(){
+  const bt=bossTypeForCurrentFloor();
+  const pos=findFreePos(bt.size||60,Math.floor(mapW()/2),Math.floor(mapH()/2));
+  gs.enemies.push(makeBossEntity(bt,pos));
+  showBanner('wave-banner',`💀 ${bt.name} — ${bt.desc}`);
+  addLog(`💀 ${bt.name} aparece: ${bt.desc}`);
+}
+function tryBossTeleport(e){
+  if(!e||e.bossType!=='teleportador')return false;
+  const now=Date.now();
+  if(now-(e.lastTeleport||0)<5000)return false;
+  const pos=findSpawnPosFarFromPlayer(e.size,260);
+  spawnExplosion(e.x+e.size/2,e.y+e.size/2,34,'#80f0ff');
+  e.x=pos.x;e.y=pos.y;e.lastTeleport=now;e.alerted=true;
+  spawnExplosion(e.x+e.size/2,e.y+e.size/2,34,'#80f0ff');
+  addLog('🌀 El jefe teleportador escapó del disparo');
+  return true;
+}
+function updateBossSpecials(now){
+  if(!gs)return;
+  for(const e of [...gs.enemies]){
+    if(!e.isBoss||e.bossPart)continue;
+    if(e.bossType==='invocador'&&now-(e.lastSpecial||0)>=5000){
+      e.lastSpecial=now;
+      const maxT=Math.min(ENEMY_TYPES.length-1,Math.floor((gs?gs.floor:1)/2)+2);
+      for(let i=0;i<2;i++)spawnEnemy(Math.floor(Math.random()*(maxT+1)),{pos:findSpawnPosFarFromPlayer(24,180),noCannibal:true});
+      spawnExplosion(e.x+e.size/2,e.y+e.size/2,42,'#66bb44');addLog('🧟 El jefe invocador arrojó infectados');
+    } else if(e.bossType==='fragmentado'){
+      if(e.splitUntil&&now>=e.splitUntil){
+        let hp=e.hp;
+        for(const part of e.splitParts||[])if(gs.enemies.includes(part))hp+=Math.max(1,part.hp);
+        gs.enemies=gs.enemies.filter(x=>!(e.splitParts||[]).includes(x));
+        e.hp=Math.min(e.maxHp,hp);e.hidden=false;e.size=e._baseSize||e.size;e.splitUntil=0;e.splitParts=[];e.lastSpecial=now;
+        spawnExplosion(e.x+e.size/2,e.y+e.size/2,46,'#ff9cff');addLog('🧬 El jefe fragmentado se fusionó');
+      } else if(!e.splitUntil&&now-(e.lastSpecial||0)>=8000){
+        const pcx=gs.player.x+gs.player.w/2,pcy=gs.player.y+gs.player.h/2,cx=e.x+e.size/2,cy=e.y+e.size/2;
+        const base=Math.atan2(pcy-cy,pcx-cx),parts=[];
+        for(const off of [-Math.PI/4,Math.PI/4]){
+          const sz=Math.max(24,Math.round(e.size*0.58)),dist=e.size*1.2;
+          const pos={x:cx+Math.cos(base+off)*dist-sz/2,y:cy+Math.sin(base+off)*dist-sz/2};
+          const part=makeBossEntity(BOSS_TYPES[2],pos,{name:'FRAGMENTO',hp:Math.ceil(e.hp/2),maxHp:Math.ceil(e.maxHp/2),size:sz,dmg:Math.round(e.dmg*0.65),xp:0,bp:0,bossPart:true,bossType:'fragmentado_parte'});
+          parts.push(part);gs.enemies.push(part);
+        }
+        e._baseSize=e.size;e.size=1;e.hidden=true;e.hp=1;e.splitParts=parts;e.splitUntil=now+3200;
+        spawnExplosion(cx,cy,54,'#ff9cff');addLog('🧬 El jefe fragmentado se dividió a 45°');
+      }
+    }
+  }
 }
 
 // checkLevelUp removed — XP goes directly to freeXP for magic upgrades
@@ -4494,6 +4558,7 @@ function update(dt){
   }
   updateGolems(now);
   updateShadowMagic(now);
+  updateBossSpecials(now);
   // Enemies
   // Noise: player adds noise when shooting or moving fast
   const shotNoise=(now-(gs.lastShotTime||0)<500)?(gs.lastShotRadius||0):0;
@@ -4602,6 +4667,7 @@ function update(dt){
       if(Math.hypot(b.x-e.x-e.size/2,b.y-e.y-e.size/2)<e.size/2+b.r){
         if(!b.hitEnemies||!b.hitEnemies.includes(e)){
           if(b.hitEnemies)b.hitEnemies.push(e);
+          if(b.type==='bullet'&&tryBossTeleport(e)){hit=true;break;}
           damageEnemy(e,b.dmg,false);if(b.explosive){const er=b.explodeRadius||60;spawnExplosion(b.x,b.y,er,'#ff6000');for(const e2 of [...gs.enemies])if(Math.hypot(b.x-e2.x-e2.size/2,b.y-e2.y-e2.size/2)<er)damageEnemy(e2,Math.round(b.dmg*0.5),false);}
         }
         if(!b.pierce){hit=true;break;}
@@ -4678,6 +4744,7 @@ function draw(){
   // NPC drawn after player (see below)
   // Enemies
   for(const e of gs.enemies){
+    if(e.hidden)continue;
     const wb=e.wobble,now2=Date.now();ctx.save();ctx.translate(e.x+e.size/2,e.y+e.size/2);
     if(e.ghost)ctx.globalAlpha=0.68;
     if(e.isCannibal){ctx.shadowColor='#ff3018';ctx.shadowBlur=14;}
@@ -4694,6 +4761,7 @@ function draw(){
     const er=e.size*0.18;const ex1=Math.cos(e.angle-0.5)*e.size*0.25,ey1=Math.sin(e.angle-0.5)*e.size*0.25;const ex2=Math.cos(e.angle+0.5)*e.size*0.25,ey2=Math.sin(e.angle+0.5)*e.size*0.25;
     ctx.fillStyle=e.eyeColor;ctx.beginPath();ctx.arc(ex1,ey1,er,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(ex2,ey2,er,0,Math.PI*2);ctx.fill();
     if(e.isCannibal){ctx.fillStyle='#ffb080';ctx.font='8px Courier New';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('CANÍBAL',0,-e.size/2-10);}
+    if(e.isBoss){ctx.fillStyle=e.eyeColor;ctx.font='8px Courier New';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(e.bossPart?'FRAGMENTO':(e.bossType||'JEFE').toUpperCase(),0,-e.size/2-10);}
     if(e.hp<e.maxHp){const bw=e.size+4;ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(-bw/2,-e.size/2-8,bw,4);ctx.fillStyle=e.hp/e.maxHp>0.5?'#3a9a3a':e.hp/e.maxHp>0.25?'#c8a020':'#c03020';ctx.fillRect(-bw/2,-e.size/2-8,bw*(e.hp/e.maxHp),4);}
     ctx.globalAlpha=1;ctx.restore();
   }
@@ -4850,7 +4918,7 @@ function updateHUD(){
   document.getElementById('bar-hp').style.width=`${Math.max(0,p.hp/p.maxHp*100)}%`;
   document.getElementById('bar-mp').style.width=`${p.mp/p.maxMp*100}%`;
   // Boss HP bar
-  const _boss=gs.enemies&&gs.enemies.find(e=>e.isBoss);
+  const _boss=gs.enemies&&gs.enemies.find(e=>e.isBoss&&!e.hidden);
   const _bossBar=document.getElementById('boss-bar');
   if(_bossBar){if(_boss){_bossBar.style.display='flex';document.getElementById('boss-hp-val').textContent=Math.round(_boss.hp);document.getElementById('boss-hp-max').textContent=_boss.maxHp;document.getElementById('boss-hp-bar').style.width=Math.max(0,_boss.hp/_boss.maxHp*100)+'%';}else _bossBar.style.display='none';}
   document.getElementById('hp-val').textContent=Math.max(0,Math.round(p.hp));
