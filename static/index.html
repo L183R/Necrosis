@@ -645,8 +645,11 @@ const TRISTARM_TOTAL_FLOORS=16;
 const TRISTARM_FINAL_XP_REWARD=250000;
 const TRISTARM_MAX_SIMULTANEOUS_ENEMIES=30;
 const TRISTARM_BASE_ENEMY_COUNT=8;
+const TRISTARM_ENEMY_COUNT_MULTIPLIER=6;
+const TRISTARM_MAP_SIZE={cols:72,rows:48};
+let tristarmFloorDecisionPending=false;
 function tristarmFloorMultipliers(floor){return {enemyCountMultiplier:Math.pow(1.2,floor-1),enemyHpMultiplier:Math.pow(1.1,floor-1),enemyDamageMultiplier:Math.pow(1.1,floor-1)};}
-function tristarmEnemyCount(floor){return Math.max(1,Math.round(TRISTARM_BASE_ENEMY_COUNT*tristarmFloorMultipliers(floor).enemyCountMultiplier));}
+function tristarmEnemyCount(floor){return Math.max(1,Math.round(TRISTARM_BASE_ENEMY_COUNT*TRISTARM_ENEMY_COUNT_MULTIPLIER*tristarmFloorMultipliers(floor).enemyCountMultiplier));}
 function isTristarmActive(){return activeMission&&activeMission.id==='tristarm';}
 let currentAuth=null;
 let save=loadSave();
@@ -1287,7 +1290,7 @@ async function startTristarm(){
   try{await tristarmApi('start');}
   catch(e){alert(e.message);return;}
   const floor=1, mul=tristarmFloorMultipliers(floor);
-  activeMission={id:'tristarm',name:'Tristarm',icon:'🔥',floors:TRISTARM_TOTAL_FLOORS,mapPool:null,mapSize:{cols:36,rows:24},enemyCount:tristarmEnemyCount(floor),
+  activeMission={id:'tristarm',name:'Tristarm',icon:'🔥',floors:TRISTARM_TOTAL_FLOORS,mapPool:null,mapSize:{...TRISTARM_MAP_SIZE},enemyCount:tristarmEnemyCount(floor),
     mtype:{id:'tristarm',name:'Tristarm',chestMul:0.35,enemyMul:1,enemyHpMul:mul.enemyHpMultiplier,enemyDmgMul:mul.enemyDamageMultiplier},
     scenario:{id:'tristarm_catacumbas',icon:'🔥',name:'Catacumbas de Tristarm',loot:{}}};
   showScreen('game');
@@ -4595,14 +4598,17 @@ function nextFloor(){
   addLog(`══ PISO ${gs.floor} ══`);persistRunProgress();spawnWave();startFloorCountdown();
 }
 async function showTristarmFloorDecision(){
+  if(tristarmFloorDecisionPending)return;
+  tristarmFloorDecisionPending=true;
   const bank=gs.tristarm?gs.tristarm.xpBank:0;
   await tristarmApi('sync',{floor:gs.floor,xp_bank:bank}).catch(()=>{});
-  if(gs.floor>=TRISTARM_TOTAL_FLOORS)return;
+  if(gs.floor>=TRISTARM_TOTAL_FLOORS){tristarmFloorDecisionPending=false;return;}
   const next=tristarmFloorMultipliers(gs.floor+1);
   const msg=`Piso ${gs.floor} completado\nBanco XP: ${bank}\nRetirarse entrega: ${Math.floor(bank*0.5)} XP\nPróximo piso: enemigos ×${next.enemyCountMultiplier.toFixed(2)}, vida ×${next.enemyHpMultiplier.toFixed(2)}, daño ×${next.enemyDamageMultiplier.toFixed(2)}\n\nOK = Descender / Cancelar = Retirarse con 50%`;
-  if(confirm(msg)){descendTristarmFloor();}else{retireTristarm();}
+  if(confirm(msg)){descendTristarmFloor();}else{tristarmFloorDecisionPending=false;retireTristarm();}
 }
 function descendTristarmFloor(){
+  tristarmFloorDecisionPending=false;
   gs.floor++;gs.wave=1;activeMission.enemyCount=tristarmEnemyCount(gs.floor);generateMap();const ns=findFreePos(28,3,3);gs.player.x=ns.x;gs.player.y=ns.y;gs.bullets=[];gs._golems=[];gs._shadowPits=[];gs._voidBursts=[];gs._sepulchralEchoes=[];document.getElementById('floor-num').textContent=gs.floor;document.getElementById('floor-max').textContent=gs.maxFloors;addLog(`══ TRISTARM PISO ${gs.floor} ══`);persistRunProgress();spawnWave();startFloorCountdown();}
 async function retireTristarm(){try{const data=await tristarmApi('retire',{floor:gs.floor,xp_bank:gs.tristarm?gs.tristarm.xpBank:0});alert(`Te retiraste de Tristarm. XP entregada: ${data.xp_delivered}`);}catch(e){alert(e.message);}showScreen('portals');}
 async function completeTristarmVictory(){if(gs.tristarm.finalClaiming)return;gs.tristarm.finalClaiming=true;const bank=gs.tristarm.xpBank;try{const data=await tristarmApi('victory',{floor:TRISTARM_TOTAL_FLOORS,xp_bank:bank,boss_id:'tristarm_final_demon'});alert(`TRISTARM COMPLETADO\nBanco: ${bank}\nRecompensa final: ${data.final_reward}\nXP total: ${data.xp_delivered}\nEnemigos derrotados: ${gs.tristarm.killed}\nJefes derrotados: ${gs.tristarm.bossesDefeated}`);}catch(e){alert(e.message);}showScreen('portals');}
@@ -4692,7 +4698,7 @@ function renderPortalsScreen(){
 }
 function unlockPortalBuildingRewardsIfBuilt(){if(hasPortalBuilding())unlockPortalBuildingRewards();}
 function openPortalDetail(id){const pt=OTHERWORLD_PORTALS.find(p=>p.id===id);if(!pt)return;const bank=save.portals.tempXpBank||{};document.getElementById('portal-detail').innerHTML=`<div class="card" style="border-color:rgba(192,160,96,0.35)"><div class="card-title">${pt.name}</div><div class="card-desc">${portalRulesHtml(pt)}</div>${pt.id==='tristarm'?`<button class="action-btn" onclick="startTristarm()">INICIAR TRISTARM</button>`:`<button class="action-btn" onclick="simulatePortalComplete('${id}')">SIMULAR COMPLETAR PORTAL</button>`}<button class="action-btn" onclick="renderPortalsScreen()">VOLVER A PORTALES</button></div>`;}
-function portalRulesHtml(pt){if(pt.id==='tristarm')return `Banco XP: ${(save.portals.tempXpBank&&save.portals.tempXpBank.xp)||0}. Escalado: enemigos ×1,2; HP/daño ×1,1 por piso; límite simultáneo 30 con oleadas. Jefes propios: El Carnicero (piso 2) y El Diablo (piso 16). Al retirarte recibís 50%; al morir perdés el banco.`;if(pt.id==='umbra_mansion')return `Llaves exclusivas: oxidada, médica, seguridad y laboratorio. Sujeto Cero es inmortal, se derriba sin XP/BP y se regenera para perseguir de nuevo. Recursos limitados.`;return `Soldados con cascos que absorben/reducen el primer impacto, rescates con recompensas únicas por aparición y jefe gigante por fases. Artillería del Slug: tecla H con demora, área marcada, enfriamiento y mucho ruido.`;}
+function portalRulesHtml(pt){if(pt.id==='tristarm')return `Banco XP: ${(save.portals.tempXpBank&&save.portals.tempXpBank.xp)||0}. Mapas 72×48; enemigos base ×6 y escalado ×1,2; HP/daño ×1,1 por piso; límite simultáneo 30 con oleadas. Jefes propios: El Carnicero (piso 2) y El Diablo (piso 16). Al retirarte recibís 50%; al morir perdés el banco.`;if(pt.id==='umbra_mansion')return `Llaves exclusivas: oxidada, médica, seguridad y laboratorio. Sujeto Cero es inmortal, se derriba sin XP/BP y se regenera para perseguir de nuevo. Recursos limitados.`;return `Soldados con cascos que absorben/reducen el primer impacto, rescates con recompensas únicas por aparición y jefe gigante por fases. Artillería del Slug: tecla H con demora, área marcada, enfriamiento y mucho ruido.`;}
 function simulatePortalComplete(id){if(!hasPortalBuilding()){alert('Construí el Portal estrafalario primero.');return;}if(id==='tristarm'){const reward=250000;save.freeXP=(+save.freeXP||0)+reward;save.portals.tempXpBank={portalId:null,floor:0,xp:0};save.uniqueRewards.tristarmFirst=true;}
  if(id==='umbra_mansion'&&!save.uniqueRewards.umbraFirst){save.resources.cultureSerum=(+save.resources.cultureSerum||0)+25;save.uniqueRewards.umbraFirst=true;}
  if(id==='steel_front'&&!save.uniqueRewards.steelFrontFirst){grantSlugReward();save.uniqueRewards.steelFrontFirst=true;}
