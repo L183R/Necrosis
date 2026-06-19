@@ -13,6 +13,9 @@ from pydantic import BaseModel
 TRISTARM_FINAL_XP_REWARD = 250_000
 TRISTARM_TOTAL_FLOORS = 16
 TRISTARM_PORTAL_KILL_REQUIREMENT = 10_000
+MANSION_UMBRA_FIRST_CLEAR_SERUM = 25
+MANSION_UMBRA_REPEAT_CLEAR_SERUM = 8
+MANSION_UMBRA_SAMPLE_SERUM = 2
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -42,6 +45,16 @@ class TristarmPayload(AuthPayload):
     boss_id: str | None = None
 
 
+class MansionUmbraPayload(AuthPayload):
+    map_seed: int | None = None
+    player_position: Dict[str, Any] | None = None
+    keys: list[str] | None = None
+    opened_doors: list[str] | None = None
+    activated_mechanisms: list[str] | None = None
+    serum_found: int | None = None
+    escaped: bool | None = None
+
+
 def _default_tristarm() -> Dict[str, Any]:
     return {
         "unlocked": False,
@@ -59,6 +72,34 @@ def _default_tristarm() -> Dict[str, Any]:
         "last_result": None,
     }
 
+
+
+def _default_mansion_umbra() -> Dict[str, Any]:
+    return {
+        "unlocked": False, "completed": False, "completion_count": 0, "active_run": False,
+        "map_seed": None, "player_position": None, "keys": [], "opened_doors": [],
+        "activated_mechanisms": [], "serum_found": 0,
+        "subject_zero_state": {"hp": 0, "downed": False, "position": None, "regeneration_end": None},
+        "first_clear_reward_claimed": False, "started_at": None, "last_result": None,
+        "stats": {"best_time_ms": None, "rooms_explored": 0, "keys_found": 0, "subject_zero_downs": 0, "serum_total_obtained": 0, "special_enemies_defeated": 0},
+    }
+
+
+def _ensure_mansion_umbra(save: Dict[str, Any]) -> Dict[str, Any]:
+    mansion = save.get("mansion_umbra") if isinstance(save.get("mansion_umbra"), dict) else {}
+    merged = {**_default_mansion_umbra(), **mansion}
+    merged["subject_zero_state"] = {**_default_mansion_umbra()["subject_zero_state"], **(mansion.get("subject_zero_state") if isinstance(mansion.get("subject_zero_state"), dict) else {})}
+    merged["stats"] = {**_default_mansion_umbra()["stats"], **(mansion.get("stats") if isinstance(mansion.get("stats"), dict) else {})}
+    for key in ("completion_count", "serum_found"):
+        merged[key] = max(0, int(merged.get(key) or 0))
+    for key in ("keys", "opened_doors", "activated_mechanisms"):
+        merged[key] = list(dict.fromkeys(merged.get(key) if isinstance(merged.get(key), list) else []))
+    merged["unlocked"] = _has_building(save, "portal_estrafalario")
+    save["mansion_umbra"] = merged
+    save.setdefault("codex", {}) if isinstance(save.get("codex"), dict) else save.update({"codex": {}})
+    for group in ("portals", "modes", "enemies"):
+        save["codex"].setdefault(group, {})
+    return merged
 
 def _has_building(save: Dict[str, Any], building_id: str) -> bool:
     base = save.get("base") if isinstance(save.get("base"), dict) else {}
@@ -128,8 +169,10 @@ def normalize_account_save(save: Dict[str, Any]) -> Dict[str, Any]:
     portals.setdefault("tempXpBank", {"portalId": None, "floor": 0, "xp": 0})
     out["portals"] = portals
     _ensure_tristarm(out)
+    _ensure_mansion_umbra(out)
     resources = out.get("resources") if isinstance(out.get("resources"), dict) else {}
     resources["cultureSerum"] = max(0, int(resources.get("cultureSerum") or 0))
+    resources["mutagenicSerum"] = max(0, int(resources.get("mutagenicSerum") or 0))
     resources["slugParts"] = max(0, int(resources.get("slugParts") or 0))
     out["resources"] = resources
     out.setdefault("walkerMutations", {"hp": 0, "damage": 0, "speed": 0, "regen": 0, "resistance": 0, "deathExplosion": 0, "behavior": 0})
@@ -209,6 +252,9 @@ async def save_game(payload: SavePayload):
         # Tristarm economy is server-authoritative while a run is active.
         # Regular saves may persist inventory/ammo, but cannot overwrite the bank/floor/reward flags.
         incoming["tristarm"] = current_tristarm
+    current_mansion = current.get("mansion_umbra", {})
+    if current_mansion.get("active_run"):
+        incoming["mansion_umbra"] = current_mansion
     accounts[user]["save"] = normalize_account_save(incoming)
     accounts[user]["updatedAt"] = int(time.time() * 1000)
     write_accounts(accounts)
@@ -302,6 +348,87 @@ async def tristarm_victory(payload: TristarmPayload):
     save["codex"]["enemies"]["tristarm_final_demon"] = "defeated"
     tristarm.update({"active_run": False, "completed": True, "completion_count": int(tristarm.get("completion_count") or 0)+1, "best_floor": TRISTARM_TOTAL_FLOORS, "best_xp_bank": max(int(tristarm.get("best_xp_bank") or 0), bank), "xp_bank": 0, "floor_cleared": False, "final_reward_claimed_for_current_run": True, "last_result": {"type":"victory","xp_bank":bank,"final_reward":TRISTARM_FINAL_XP_REWARD,"xp_delivered":total}})
     return {"ok": True, "xp_delivered": total, "final_reward": TRISTARM_FINAL_XP_REWARD, "save": _persist_user_save(user, save)}
+
+
+def _require_mansion_umbra_access(save: Dict[str, Any]):
+    mansion = _ensure_mansion_umbra(save)
+    if not _has_building(save, "portal_estrafalario"):
+        raise HTTPException(status_code=403, detail="Mansión Umbra requiere construir el Portal estrafalario (10.000 bajas totales).")
+    return mansion
+
+
+@app.post("/api/mansion-umbra/start")
+async def mansion_umbra_start(payload: MansionUmbraPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    mansion = _require_mansion_umbra_access(save)
+    if mansion.get("active_run"):
+        raise HTTPException(status_code=409, detail="Ya hay una run de Mansión Umbra activa.")
+    seed = int(payload.map_seed or secrets.randbelow(2_147_483_647))
+    mansion.update({"active_run": True, "map_seed": seed, "player_position": None, "keys": [], "opened_doors": [], "activated_mechanisms": [], "serum_found": 0, "subject_zero_state": {"hp": 1800, "downed": False, "position": None, "regeneration_end": None}, "started_at": int(time.time()*1000), "last_result": None})
+    save["codex"]["portals"]["mansion_umbra"] = "played"
+    save["codex"]["modes"]["mansion_umbra"] = "played"
+    return {"ok": True, "map_seed": seed, "save": _persist_user_save(user, save)}
+
+
+@app.post("/api/mansion-umbra/sync")
+async def mansion_umbra_sync(payload: MansionUmbraPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    mansion = _require_mansion_umbra_access(save)
+    if not mansion.get("active_run"):
+        raise HTTPException(status_code=409, detail="No hay una run de Mansión Umbra activa.")
+    allowed_keys = {"rusty_key", "medical_key", "security_key", "laboratory_key"}
+    allowed_mechs = {"generator", "security_panel", "decontamination", "lab_terminal", "exit_switch"}
+    mansion["keys"] = [k for k in dict.fromkeys(payload.keys or mansion.get("keys", [])) if k in allowed_keys]
+    mansion["opened_doors"] = [str(d)[:48] for d in dict.fromkeys(payload.opened_doors or mansion.get("opened_doors", []))]
+    mansion["activated_mechanisms"] = [m for m in dict.fromkeys(payload.activated_mechanisms or mansion.get("activated_mechanisms", [])) if m in allowed_mechs]
+    mansion["serum_found"] = max(int(mansion.get("serum_found") or 0), max(0, int(payload.serum_found or 0)))
+    if payload.player_position and all(k in payload.player_position for k in ("x", "y")):
+        x, y = float(payload.player_position["x"]), float(payload.player_position["y"])
+        if 0 <= x <= 4096 and 0 <= y <= 4096:
+            mansion["player_position"] = {"x": x, "y": y}
+    return {"ok": True, "save": _persist_user_save(user, save)}
+
+
+@app.post("/api/mansion-umbra/abandon")
+async def mansion_umbra_abandon(payload: MansionUmbraPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    mansion = _ensure_mansion_umbra(save)
+    mansion.update({"active_run": False, "keys": [], "opened_doors": [], "activated_mechanisms": [], "serum_found": 0, "last_result": {"type": "abandon"}})
+    return {"ok": True, "save": _persist_user_save(user, save)}
+
+
+@app.post("/api/mansion-umbra/victory")
+async def mansion_umbra_victory(payload: MansionUmbraPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    mansion = _require_mansion_umbra_access(save)
+    if not mansion.get("active_run"):
+        raise HTTPException(status_code=409, detail="No hay una run de Mansión Umbra activa.")
+    keys = set(payload.keys or mansion.get("keys", []))
+    mechs = set(payload.activated_mechanisms or mansion.get("activated_mechanisms", []))
+    required_keys = {"rusty_key", "medical_key", "security_key", "laboratory_key"}
+    required_mechs = {"generator", "security_panel", "decontamination", "lab_terminal", "exit_switch"}
+    if not required_keys.issubset(keys) or not required_mechs.issubset(mechs) or not payload.escaped:
+        raise HTTPException(status_code=403, detail="Victoria inválida: faltan llaves, mecanismos o escape verificado.")
+    first = not mansion.get("first_clear_reward_claimed")
+    clear_serum = MANSION_UMBRA_FIRST_CLEAR_SERUM if first else MANSION_UMBRA_REPEAT_CLEAR_SERUM
+    run_serum = max(int(mansion.get("serum_found") or 0), max(0, int(payload.serum_found or 0)))
+    total_serum = clear_serum + run_serum
+    resources = save.setdefault("resources", {})
+    resources["mutagenicSerum"] = max(0, int(resources.get("mutagenicSerum") or 0)) + total_serum
+    mansion["stats"]["serum_total_obtained"] = int(mansion["stats"].get("serum_total_obtained") or 0) + total_serum
+    mansion.update({"active_run": False, "completed": True, "completion_count": int(mansion.get("completion_count") or 0)+1, "first_clear_reward_claimed": True, "keys": [], "opened_doors": [], "activated_mechanisms": [], "serum_found": 0, "last_result": {"type": "victory", "clear_serum": clear_serum, "run_serum": run_serum, "serum_delivered": total_serum}})
+    save.setdefault("portals", {}).setdefault("completed", {})["mansion_umbra"] = True
+    save["codex"]["portals"]["mansion_umbra"] = "defeated"
+    save["codex"]["enemies"]["subject_zero"] = "seen"
+    return {"ok": True, "serum_delivered": total_serum, "clear_serum": clear_serum, "run_serum": run_serum, "save": _persist_user_save(user, save)}
 
 @app.post("/api/reset")
 async def reset_game(payload: AuthPayload):
