@@ -193,6 +193,7 @@ canvas{display:block;position:fixed;inset:0}
   <button class="menu-btn" onclick="requireAuthScreen('base')">🏗 BASE</button>
   <button class="menu-btn" id="menu-portals-btn" onclick="requireAuthScreen('portals')">🌀 PORTALES A OTRO MUNDO</button>
   <button class="menu-btn" onclick="requireAuthScreen('shops')">🛒 TIENDAS</button>
+  <button class="menu-btn" id="sound-toggle-btn" onclick="toggleSoundFX()">🔊 SONIDO ON</button>
   <button class="menu-btn" onclick="resetSave()" style="margin-top:18px;font-size:10px;opacity:0.5">✕ BORRAR PROGRESO</button>
   <div id="menu-save-info"></div>
 </div>
@@ -513,6 +514,85 @@ function normalizeSave(raw){
   return merged;
 }
 function loadSave(raw){return normalizeSave(raw);}
+
+// ═══════════════════════════════════════════════════════════
+// AUDIO — procedural sound effects (no external assets)
+// ═══════════════════════════════════════════════════════════
+const SFX={ctx:null,enabled:localStorage.getItem('necrosis_sfx')!=='off',master:null,unlocked:false};
+function initAudio(){
+  if(SFX.ctx)return SFX.ctx;
+  const AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC)return null;
+  const ctx=new AC();
+  SFX.master=ctx.createGain();
+  SFX.master.gain.value=0.22;
+  SFX.master.connect(ctx.destination);
+  SFX.ctx=ctx;
+  return ctx;
+}
+function unlockAudio(){
+  const ctx=initAudio();
+  if(ctx&&ctx.state==='suspended')ctx.resume();
+  SFX.unlocked=!!ctx;
+}
+function updateSoundButton(){
+  const btn=document.getElementById('sound-toggle-btn');
+  if(btn)btn.textContent=SFX.enabled?'🔊 SONIDO ON':'🔇 SONIDO OFF';
+}
+function toggleSoundFX(){
+  SFX.enabled=!SFX.enabled;
+  localStorage.setItem('necrosis_sfx',SFX.enabled?'on':'off');
+  unlockAudio();
+  updateSoundButton();
+  if(SFX.enabled)playSfx('ui');
+}
+function tone(freq,dur=0.08,type='sine',vol=0.5,delay=0,slideTo=null){
+  if(!SFX.enabled)return;
+  const ctx=initAudio();if(!ctx||!SFX.master)return;
+  const t=ctx.currentTime+delay;
+  const osc=ctx.createOscillator(),gain=ctx.createGain();
+  osc.type=type;osc.frequency.setValueAtTime(freq,t);
+  if(slideTo)osc.frequency.exponentialRampToValueAtTime(Math.max(1,slideTo),t+dur);
+  gain.gain.setValueAtTime(0.0001,t);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002,vol),t+0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  osc.connect(gain);gain.connect(SFX.master);osc.start(t);osc.stop(t+dur+0.02);
+}
+function noise(dur=0.12,vol=0.35,delay=0,filterFreq=700,type='lowpass'){
+  if(!SFX.enabled)return;
+  const ctx=initAudio();if(!ctx||!SFX.master)return;
+  const t=ctx.currentTime+delay;
+  const buffer=ctx.createBuffer(1,Math.max(1,ctx.sampleRate*dur),ctx.sampleRate);
+  const data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length);
+  const src=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
+  src.buffer=buffer;filter.type=type;filter.frequency.setValueAtTime(filterFreq,t);
+  gain.gain.setValueAtTime(vol,t);gain.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(filter);filter.connect(gain);gain.connect(SFX.master);src.start(t);src.stop(t+dur+0.02);
+}
+function playSfx(name){
+  if(!SFX.enabled)return;
+  unlockAudio();
+  switch(name){
+    case 'shoot': noise(0.07,0.5,0,900,'lowpass');tone(90,0.055,'square',0.18,0,45);break;
+    case 'shotgun': noise(0.14,0.65,0,520,'lowpass');tone(70,0.09,'sawtooth',0.2,0,36);break;
+    case 'rocket': tone(120,0.18,'sawtooth',0.22,0,65);noise(0.16,0.35,0,420,'bandpass');break;
+    case 'melee': noise(0.055,0.25,0,1600,'highpass');tone(260,0.055,'triangle',0.16,0,180);break;
+    case 'hit': noise(0.055,0.2,0,900,'bandpass');tone(150,0.045,'square',0.12,0,90);break;
+    case 'kill': tone(190,0.07,'triangle',0.18,0,95);tone(95,0.09,'sine',0.14,0.04,55);break;
+    case 'hurt': tone(95,0.16,'sawtooth',0.24,0,45);noise(0.1,0.18,0,500,'lowpass');break;
+    case 'explode': noise(0.28,0.7,0,260,'lowpass');tone(58,0.22,'sawtooth',0.28,0,30);break;
+    case 'reload': tone(380,0.045,'square',0.13);tone(520,0.045,'square',0.12,0.08);break;
+    case 'skill': tone(520,0.09,'sine',0.14);tone(780,0.12,'triangle',0.12,0.05);break;
+    case 'heal': tone(420,0.08,'sine',0.12);tone(630,0.08,'sine',0.12,0.07);tone(840,0.11,'sine',0.1,0.14);break;
+    case 'chest': tone(260,0.06,'triangle',0.13);tone(520,0.08,'triangle',0.12,0.07);break;
+    case 'door': tone(180,0.12,'sawtooth',0.16,0,260);break;
+    case 'wave': tone(110,0.12,'sawtooth',0.18);tone(165,0.16,'sawtooth',0.15,0.11);break;
+    case 'ui': tone(440,0.045,'triangle',0.08);break;
+  }
+}
+document.addEventListener('pointerdown',unlockAudio,{once:true});
+document.addEventListener('keydown',unlockAudio,{once:true});
+document.addEventListener('click',e=>{if(e.target&&e.target.closest('button'))playSfx('ui');},true);
 let currentAuth=null;
 let save=loadSave();
 let saveTimer=null;
@@ -1030,6 +1110,7 @@ function renderMissionSelect(){
 }
 
 function startMission(idx){
+  playSfx('wave');
   activeMission=_generatedMissions[idx];
   codexDiscover('scenarios',activeMission.scenario.id,'played');
   codexDiscover('modes',activeMission.mtype.id,'played');
@@ -1064,6 +1145,7 @@ function startMission(idx){
 }
 
 function startBossTest(){
+  playSfx('wave');
   activeMission={
     id:'boss_test',name:'Prueba de Jefes',floors:1,mapPool:null,mapSize:{cols:32,rows:22},enemyCount:4,
     mtype:{id:'boss_test',name:'Prueba de Jefes',chestMul:0,enemyMul:1},
@@ -3368,6 +3450,7 @@ function spawnChests(count){
 function openChest(chest){
   if(chest.open)return;
   chest.open=true;
+  playSfx('chest');
   // Immediate BP — taken automatically; everything else goes to modal
 }
 
@@ -3643,6 +3726,7 @@ function pocketToChest(slotIdx){
   renderChestModal();
 }
 function closeChestAndContinue(){
+  playSfx('door');
   countDeclinedChestLoot();
   document.getElementById('chest-modal').classList.add('hidden');
   gs.paused=false;
@@ -3941,6 +4025,7 @@ function reloadWeapon(){
   ws.ammo+=take;
   // Caja vacía se conserva en el bolsillo (rounds=0, cap sigue igual)
   ws.reloading=true;ws.reloadEnd=Date.now()+w.reload;
+  playSfx('reload');
   addLog(`Recargando ${w.name} (+${take}) [${w.caliber}]`);
   refreshPocketsHUD();
 }
@@ -3962,6 +4047,7 @@ function fireSingleShot(p,w,ws,angle){
     gs.bullets.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:Math.cos(angle)*10,vy:Math.sin(angle)*10,dmg,range:w.range,traveled:0,type:'bullet',r:4,color:'#f0e68c',weaponType:'firearm'});
   }
   spawnMuzzleFlash(p.x+p.w/2,p.y+p.h/2,angle);
+  playSfx(w.spread?'shotgun':w.explosive?'rocket':'shoot');
   return true;
 }
 
@@ -3987,6 +4073,7 @@ function tryAttack(){
         damagePurgePortal(portal,meleeDmg());
     }
     spawnMeleeEffect(p.x+p.w/2,p.y+p.h/2,angle);
+    playSfx('melee');
     return;
   }
 
@@ -4015,6 +4102,7 @@ function useSkill(idx){
   const mpCost=s.mpCost||skillMPCost(SKILL_DEF[s.id],s.lv||0);
   if(p.mp<mpCost){addLog(`Sin magia (${mpCost} MP necesarios)`);return;}
   p.mp=Math.max(0,p.mp-mpCost);
+  playSfx(s.id==='curacion'||s.id==='regeneracion'?'heal':'skill');
   s.castEnd=now+s.cast;
   const wx=gs.mouseX+gs.camera.x,wy=gs.mouseY+gs.camera.y;
   const angle=Math.atan2(wy-p.y-p.h/2,wx-p.x-p.w/2);
@@ -4177,6 +4265,7 @@ function damageEnemy(e,dmg,stun,opts={}){
   e.hp-=dmg;if(stun)e.stunTime=Date.now()+280;
   spawnDmgNumber(e.x+e.size/2,e.y,dmg,false);
   spawnBloodParticles(e.x+e.size/2,e.y+e.size/2,e.color);
+  playSfx('hit');
   if(e.hp<=0)killEnemy(e,{noReward:!!opts.noReward});
 }
 function killEnemy(e,opts={}){
@@ -4197,6 +4286,7 @@ function killEnemy(e,opts={}){
     if(opts.weaponType==='melee')addShopProgress('meleeKills',1);
     if(e.isCannibal||e.codexId==='canibal')addShopProgress('cannibalsDefeated',1);
   }
+  playSfx('kill');
   spawnExplosion(e.x+e.size/2,e.y+e.size/2,18,e.color);
   addLog(noReward?`Sin recompensa — ${e.name}`:`+${xpGain} XP  +${bpGain} BP — ${e.name}`);
   gs.enemies=gs.enemies.filter(x=>x!==e);
@@ -4211,12 +4301,13 @@ function explodeKamikaze(e){
   if(!gs||!gs.enemies.includes(e))return;
   const p=gs.player,cx=e.x+e.size/2,cy=e.y+e.size/2;
   const radius=e.explodeRadius||80,dmg=e.explosionDmg||60;
+  playSfx('explode');
   spawnExplosion(cx,cy,radius,'#ff7a18');
   addLog('💥 Kamikaze explotó');
   const pd=Math.hypot(p.x+p.w/2-cx,p.y+p.h/2-cy);
   if(pd<radius&&p.invTime<Date.now()){
     const playerDmg=Math.max(1,Math.round(dmg*(1-pd/radius*0.45)));
-    p.hp-=playerDmg;p.invTime=Date.now()+500;spawnDmgNumber(p.x+p.w/2,p.y,playerDmg,true);
+    p.hp-=playerDmg;p.invTime=Date.now()+500;playSfx('hurt');spawnDmgNumber(p.x+p.w/2,p.y,playerDmg,true);
     if(p.hp<=0){gs.gameOver=true;persistRunProgress();}
   }
   gs.enemies=gs.enemies.filter(x=>x!==e);
@@ -5540,6 +5631,7 @@ function addLog(msg){
 // BOOT
 // ═══════════════════════════════════════════════════════════
 updateMenuInfo();
+updateSoundButton();
 requestAnimationFrame(gameLoop);
 </script>
 
