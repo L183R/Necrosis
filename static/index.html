@@ -191,6 +191,7 @@ canvas{display:block;position:fixed;inset:0}
   <button class="menu-btn" onclick="requireAuthScreen('char')">◈ PERSONAJE</button>
   <button class="menu-btn" onclick="requireAuthScreen('codex')">📖 CÓDEX</button>
   <button class="menu-btn" onclick="requireAuthScreen('base')">🏗 BASE</button>
+  <button class="menu-btn" id="menu-portals-btn" onclick="requireAuthScreen('portals')">🌀 PORTALES A OTRO MUNDO</button>
   <button class="menu-btn" onclick="requireAuthScreen('shops')">🛒 TIENDAS</button>
   <button class="menu-btn" onclick="resetSave()" style="margin-top:18px;font-size:10px;opacity:0.5">✕ BORRAR PROGRESO</button>
   <div id="menu-save-info"></div>
@@ -297,6 +298,28 @@ canvas{display:block;position:fixed;inset:0}
       <div id="workshop-content"></div>
     </div>
     <button class="back-btn" onclick="showScreen('menu')" style="margin-top:20px">← VOLVER AL MENÚ</button>
+  </div>
+</div>
+
+
+<!-- PORTALS SCREEN -->
+<div class="screen hidden" id="screen-portals" style="position:fixed;inset:0;overflow-y:auto;display:block;background:#0d0d12">
+  <div class="char-wrap" style="padding:32px 20px">
+    <div class="char-header">
+      <div class="char-avatar">🌀</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div class="char-name">PORTALES A OTRO MUNDO</div>
+        <div class="char-level" id="portals-subtitle">Requiere construir el Portal estrafalario</div>
+      </div>
+      <div class="char-currency">
+        <div class="currency-row"><span style="font-size:14px">🧟</span><span class="currency-val" id="portal-kills-disp">0</span><span class="currency-label">BAJAS</span></div>
+        <div class="currency-row"><span style="font-size:14px">🧪</span><span class="currency-val" id="portal-serum-disp">0</span><span class="currency-label">SUERO</span></div>
+        <div class="currency-row"><span style="font-size:14px">⚙</span><span class="currency-val" id="portal-slugparts-disp">0</span><span class="currency-label">PIEZAS SLUG</span></div>
+      </div>
+    </div>
+    <div id="portals-grid" style="display:flex;flex-direction:column;gap:12px"></div>
+    <div id="portal-detail" style="margin-top:16px"></div>
+    <button class="back-btn" onclick="showScreen('menu')">← VOLVER AL MENÚ</button>
   </div>
 </div>
 
@@ -442,8 +465,14 @@ const DEFAULT_SAVE={
   armorMods: {},  // {armorUid: [{id,stat,value},...]}  — modifications installed by taller
   ownedArmorMods: {}, // {modId: count} — armor accessories found as loot, consumed in taller
   loadout: [], // pocket configuration saved between runs [{type,...}|null]
-  codex:{enemies:{},weapons:{cuchillo:'owned',pistola:'owned'},armors:{chaleco_comun:'owned'},scenarios:{},modes:{}},
+  codex:{enemies:{},weapons:{cuchillo:'owned',pistola:'owned'},armors:{chaleco_comun:'owned'},scenarios:{},modes:{},portals:{}},
   shopProgress:{ammoDeclined:0,consumableDeclined:0,firearmKills:0,meleeKills:0,screensCompleted:0,cannibalsDefeated:0},
+  totalEnemyKills:0,
+  portals:{unlocked:{},completed:{},tempXpBank:{portalId:null,floor:0,xp:0}},
+  resources:{cultureSerum:0,slugParts:0},
+  walkerMutations:{hp:0,damage:0,speed:0,regen:0,resistance:0,deathExplosion:0,behavior:0},
+  uniqueRewards:{umbraFirst:false,steelFrontFirst:false,tristarmFirst:false},
+  slug:{owned:false,inventoryLevel:0,screensLevel:0,noiseLevel:0,artillery:false},
 };
 function normalizeSave(raw){
   const base=JSON.parse(JSON.stringify(DEFAULT_SAVE));
@@ -459,7 +488,16 @@ function normalizeSave(raw){
   if(!Array.isArray(merged.loadout))merged.loadout=[];
   if(!merged.codex||typeof merged.codex!=='object')merged.codex={};
   merged.shopProgress=Object.assign({},DEFAULT_SAVE.shopProgress,(raw&&raw.shopProgress)||{});
-  ['enemies','weapons','armors','scenarios','modes'].forEach(k=>{if(!merged.codex[k]||typeof merged.codex[k]!=='object'||Array.isArray(merged.codex[k]))merged.codex[k]={};});
+  merged.portals=Object.assign({},DEFAULT_SAVE.portals,(raw&&raw.portals)||{});
+  merged.portals.unlocked=Object.assign({},DEFAULT_SAVE.portals.unlocked,merged.portals.unlocked||{});
+  merged.portals.completed=Object.assign({},DEFAULT_SAVE.portals.completed,merged.portals.completed||{});
+  merged.portals.tempXpBank=Object.assign({},DEFAULT_SAVE.portals.tempXpBank,merged.portals.tempXpBank||{});
+  merged.resources=Object.assign({},DEFAULT_SAVE.resources,(raw&&raw.resources)||{});
+  merged.walkerMutations=Object.assign({},DEFAULT_SAVE.walkerMutations,(raw&&raw.walkerMutations)||{});
+  merged.uniqueRewards=Object.assign({},DEFAULT_SAVE.uniqueRewards,(raw&&raw.uniqueRewards)||{});
+  merged.slug=Object.assign({},DEFAULT_SAVE.slug,(raw&&raw.slug)||{});
+  merged.totalEnemyKills=Math.max(0,Math.round(+merged.totalEnemyKills||0));
+  ['enemies','weapons','armors','scenarios','modes','portals'].forEach(k=>{if(!merged.codex[k]||typeof merged.codex[k]!=='object'||Array.isArray(merged.codex[k]))merged.codex[k]={};});
   if(!merged.ownedArmorMods||typeof merged.ownedArmorMods!=='object'||Array.isArray(merged.ownedArmorMods))merged.ownedArmorMods={};
   merged.freeXP=Math.max(0,Math.round(+merged.freeXP||0));
   const legacyXP=Math.max(0,Math.round(+merged.xp||0));
@@ -1422,8 +1460,9 @@ const VEHICLE_CAT=[
   {id:'pickup',         name:'Camioneta Pickup',  icon:'🛻', capacity:12, missions:7, noiseMul:1.40, cost:1200, weight:12,  desc:'Lootero fuerte'},
   {id:'furgon_blindado',name:'Furgón Blindado',   icon:'🚐', capacity:16, missions:7, noiseMul:1.55, cost:2000, weight:8,   desc:'Mucha carga, mucho ruido'},
   {id:'camion_militar', name:'Camión Militar',    icon:'🚛', capacity:24, missions:8, noiseMul:1.80, cost:4000, weight:3,   desc:'Late game / expedición pesada'},
+  {id:'slug',           name:'Slug',              icon:'🛞', capacity:2,  missions:5, noiseMul:1.10, cost:0,    weight:0,   unique:true, desc:'Vehículo único de Frente de Acero'},
 ];
-const vhById=id=>VEHICLE_CAT.find(v=>v.id===id);
+const vhById=id=>{const v=VEHICLE_CAT.find(v=>v.id===id);if(!v)return null;if(id==='slug')return {...v,capacity:v.capacity+(save.slug?.inventoryLevel||0),missions:v.missions+(save.slug?.screensLevel||0),noiseMul:Math.round((v.noiseMul+(save.slug?.noiseLevel||0)*0.05)*100)/100};return v;};
 
 // Max vehicles = 2 + taller_mecanico levels
 function maxVehicles(){
@@ -1691,14 +1730,16 @@ function showScreen(name){
   document.getElementById('screen-codex').classList.toggle('hidden',name!=='codex');
   document.getElementById('screen-base').classList.toggle('hidden',name!=='base');
   document.getElementById('screen-shops').classList.toggle('hidden',name!=='shops');
+  document.getElementById('screen-portals')?.classList.toggle('hidden',name!=='portals');
   document.getElementById('screen-mission').classList.toggle('hidden',name!=='mission');
   document.getElementById('game-ui').classList.toggle('hidden',name!=='game');
   if(name==='menu'){updateMenuInfo();stopGame();}
-  if((name==='mission'||name==='game'||name==='char'||name==='base'||name==='codex'||name==='shops')&&!isLoggedIn()){showScreen('auth');setAuthMessage('Tenés que iniciar sesión para ver tu progreso.',true);return;}
+  if((name==='mission'||name==='game'||name==='char'||name==='base'||name==='codex'||name==='shops'||name==='portals')&&!isLoggedIn()){showScreen('auth');setAuthMessage('Tenés que iniciar sesión para ver tu progreso.',true);return;}
   if(name==='char')renderCharScreen();
   if(name==='codex')renderCodexScreen();
   if(name==='base')renderBase();
   if(name==='shops')renderShops();
+  if(name==='portals')renderPortalsScreen();
   if(name==='mission')renderMissionSelect();
   if(name==='game')startGame();
   currentScreen=name;
@@ -1712,8 +1753,10 @@ function updateMenuInfo(){
     const user=currentAccount();
     userInfo.innerHTML=isLoggedIn()?`Sesión: <strong>${user}</strong> · <button onclick="logoutAccount()" style="background:transparent;border:0;color:#8a7e6e;font-family:inherit;font-size:10px;letter-spacing:2px;cursor:pointer;text-decoration:underline">CERRAR</button>`:'No has iniciado sesión';
   }
+  const pbtn=document.getElementById('menu-portals-btn');
+  if(pbtn){const built=Object.values(s.base||{}).some(b=>b&&b.buildingId==='portal_estrafalario');pbtn.textContent=built?'🌀 PORTALES A OTRO MUNDO':'🔒 PORTALES A OTRO MUNDO';pbtn.title=built?'Entrar a portales':'Necesitás construir el Portal estrafalario';pbtn.style.opacity=built?'1':'0.55';}
   document.getElementById('menu-save-info').textContent=
-    s.level>1?`Nivel ${s.level}  •  ${s.bp} BP  •  ${s.freeXP} XP  •  Piso más alto: ${s.highestFloor}`:'Sin partida guardada';
+    s.level>1?`Nivel ${s.level}  •  ${s.bp} BP  •  ${s.freeXP} XP  •  Bajas: ${s.totalEnemyKills||0}  •  Piso más alto: ${s.highestFloor}`:'Sin partida guardada';
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2190,6 +2233,7 @@ function openWorkshop(buildingId){
   if(buildingId==='taller_armas') renderWorkshopArmas(content);
   else if(buildingId==='taller_armaduras') renderWorkshopArmaduras(content);
   else if(buildingId==='taller_mecanico') renderWorkshopMecanico(content);
+  else if(buildingId==='modificador_virus') renderVirusModifier(content);
 }
 
 // ── Taller de Armas: weapon attachment slots ────────────────
@@ -4147,6 +4191,7 @@ function killEnemy(e,opts={}){
   const xpGain=noReward?0:Math.round((e.xp+(sec.xpBonus||0))*_xpMul);
   const bpGain=noReward?0:Math.round((e.bp+(sec.bpBonus||0))*_bpMul);
   if(!noReward){
+    save.totalEnemyKills=(+save.totalEnemyKills||0)+1;
     p.freeXP+=xpGain;p.bp+=bpGain;triggerSepulchralEcho(e);codexDiscover('enemies',e.codexId||e.name,'defeated');
     if(opts.weaponType==='firearm')addShopProgress('firearmKills',1);
     if(opts.weaponType==='melee')addShopProgress('meleeKills',1);
@@ -4293,6 +4338,46 @@ function spawnDmgNumber(x,y,val,isPlayer){
 }
 
 
+
+function hasBuilding(buildingId){return Object.values(save.base||{}).some(b=>b&&b.buildingId===buildingId);}
+function hasPortalBuilding(){return hasBuilding('portal_estrafalario');}
+function unlockPortalBuildingRewards(){if(!save.portals)save.portals={unlocked:{},completed:{},tempXpBank:{portalId:null,floor:0,xp:0}};save.portals.unlocked.tristarm=true;save.portals.unlocked.umbra_mansion=true;save.portals.unlocked.steel_front=true;}
+const OTHERWORLD_PORTALS=[
+ {id:'tristarm',name:'Tristarm',desc:'Descenso por 16 pisos con Banco de XP temporal.',reward:'XP masiva al derrotar al Señor del Abismo',kind:'diablo'},
+ {id:'umbra_mansion',name:'Mansión Umbra',desc:'Laberinto de llaves y supervivencia con Sujeto Cero.',reward:'Modificador de virus + Suero de cultivo',kind:'survival'},
+ {id:'steel_front',name:'Frente de Acero',desc:'Avance lineal arcade, rescates y jefe gigante.',reward:'Vehículo único Slug + 15 Piezas de Slug',kind:'arcade'},
+];
+
+function renderVirusModifier(content){
+  const defs=[['hp','Más vida'],['damage','Más daño'],['speed','Más velocidad'],['regen','Regeneración'],['resistance','Resistencia adicional'],['deathExplosion','Explosión al morir'],['behavior','Cambios de comportamiento']];
+  content.innerHTML=`<div style="font-size:10px;color:#c8bfa8;margin-bottom:10px">🧪 Suero de cultivo: ${save.resources?.cultureSerum||0}</div><div style="font-size:9px;color:#5a5248;margin-bottom:10px">Las mutaciones quedan guardadas para caminantes aliados/producidos por la base. No afectan enemigos globales.</div><div class="two-col">`+
+    defs.map(([id,name])=>{const lv=save.walkerMutations?.[id]||0;const cost=5*Math.pow(2,lv);return `<div class="card"><div class="card-title">${name} Nv${lv}</div><div class="card-desc">Coste: ${cost} Suero de cultivo</div><button class="action-btn" onclick="buyWalkerMutation('${id}')">MEJORAR</button></div>`}).join('')+'</div>';
+}
+function buyWalkerMutation(id){const lv=save.walkerMutations?.[id]||0;const cost=5*Math.pow(2,lv);if((save.resources.cultureSerum||0)<cost){alert('No alcanza el Suero de cultivo.');return;}if(!confirm(`Gastar ${cost} Suero de cultivo?`))return;save.resources.cultureSerum-=cost;save.walkerMutations[id]=lv+1;writeSave();renderVirusModifier(document.getElementById('workshop-content'));}
+
+function renderPortalsScreen(){
+  unlockPortalBuildingRewardsIfBuilt();
+  document.getElementById('portal-kills-disp').textContent=save.totalEnemyKills||0;
+  document.getElementById('portal-serum-disp').textContent=save.resources?.cultureSerum||0;
+  document.getElementById('portal-slugparts-disp').textContent=save.resources?.slugParts||0;
+  document.getElementById('portals-subtitle').textContent=hasPortalBuilding()?'Portales disponibles':'Bloqueado: construí el Portal estrafalario en la Base';
+  const grid=document.getElementById('portals-grid');grid.innerHTML='';
+  OTHERWORLD_PORTALS.forEach(pt=>{const unlocked=hasPortalBuilding()&&!!save.portals.unlocked[pt.id];const completed=!!save.portals.completed[pt.id];grid.innerHTML+=`<div class="card ${unlocked?'owned':'locked'}"><div class="card-top"><span class="card-icon">${pt.id==='tristarm'?'🔥':pt.id==='umbra_mansion'?'🏚️':'🎖️'}</span><div><div class="card-title">${pt.name}</div><div class="card-sub">${unlocked?(completed?'COMPLETADO':'DESBLOQUEADO'):'BLOQUEADO'}</div></div></div><div class="card-desc">${pt.desc}</div><div class="card-stats"><div class="cs">Recompensa <span>${pt.reward}</span></div></div>${unlocked?`<button class="action-btn" onclick="openPortalDetail('${pt.id}')">ENTRAR</button>`:`<div class="owned-tag" style="color:#6f6658">Necesitás construir el Portal estrafalario</div>`}</div>`;});
+  renderSlugUpgrades();
+}
+function unlockPortalBuildingRewardsIfBuilt(){if(hasPortalBuilding())unlockPortalBuildingRewards();}
+function openPortalDetail(id){const pt=OTHERWORLD_PORTALS.find(p=>p.id===id);if(!pt)return;const bank=save.portals.tempXpBank||{};document.getElementById('portal-detail').innerHTML=`<div class="card" style="border-color:rgba(192,160,96,0.35)"><div class="card-title">${pt.name}</div><div class="card-desc">${portalRulesHtml(pt)}</div><button class="action-btn" onclick="simulatePortalComplete('${id}')">SIMULAR COMPLETAR PORTAL</button><button class="action-btn" onclick="renderPortalsScreen()">VOLVER A PORTALES</button></div>`;}
+function portalRulesHtml(pt){if(pt.id==='tristarm')return `Banco XP: ${(save.portals.tempXpBank&&save.portals.tempXpBank.xp)||0}. Escalado: enemigos ×1,2; HP/daño ×1,1 por piso; límite simultáneo 80. Jefes propios: Guardián Carnoso (piso 2) y Señor del Abismo (piso 16). Al retirarte recibís 50%; al morir perdés el banco.`;if(pt.id==='umbra_mansion')return `Llaves exclusivas: oxidada, médica, seguridad y laboratorio. Sujeto Cero es inmortal, se derriba sin XP/BP y se regenera para perseguir de nuevo. Recursos limitados.`;return `Soldados con cascos que absorben/reducen el primer impacto, rescates con recompensas únicas por aparición y jefe gigante por fases. Artillería del Slug: tecla H con demora, área marcada, enfriamiento y mucho ruido.`;}
+function simulatePortalComplete(id){if(!hasPortalBuilding()){alert('Construí el Portal estrafalario primero.');return;}if(id==='tristarm'){const reward=250000;save.freeXP=(+save.freeXP||0)+reward;save.portals.tempXpBank={portalId:null,floor:0,xp:0};save.uniqueRewards.tristarmFirst=true;}
+ if(id==='umbra_mansion'&&!save.uniqueRewards.umbraFirst){save.resources.cultureSerum=(+save.resources.cultureSerum||0)+25;save.uniqueRewards.umbraFirst=true;}
+ if(id==='steel_front'&&!save.uniqueRewards.steelFrontFirst){grantSlugReward();save.uniqueRewards.steelFrontFirst=true;}
+ save.portals.completed[id]=true;codexDiscover('portals',id,'defeated');writeSave();renderPortalsScreen();addLog('Portal completado: '+id);}
+function grantSlugReward(){save.slug.owned=true;save.resources.slugParts=(+save.resources.slugParts||0)+15;if(!save.vehicles.some(v=>v.id==='slug'))save.vehicles.push({id:'slug',cargo:[]});}
+function slugUpgradeCost(kind){const lv=save.slug[kind+'Level']||0;return (kind==='inventory'?100:kind==='screens'?15:5)*Math.pow(2,lv);}
+function buySlugUpgrade(kind){if(!save.slug.owned){alert('Primero obtené el Slug.');return;}const cost=slugUpgradeCost(kind);if((save.resources.slugParts||0)<cost){alert('No alcanzan las Piezas de Slug.');return;}if(!confirm(`Gastar ${cost} Piezas de Slug?`))return;save.resources.slugParts-=cost;save.slug[kind+'Level']=(save.slug[kind+'Level']||0)+1;writeSave();renderPortalsScreen();}
+function buySlugArtillery(){if(!save.slug.owned)return alert('Primero obtené el Slug.');if(save.slug.artillery)return;if((save.resources.slugParts||0)<300)return alert('No alcanzan las Piezas de Slug.');if(!confirm('Gastar 300 Piezas de Slug en apoyo de artillería?'))return;save.resources.slugParts-=300;save.slug.artillery=true;writeSave();renderPortalsScreen();}
+function renderSlugUpgrades(){const el=document.getElementById('portal-detail');if(!el||!save.slug?.owned)return;el.innerHTML=`<div class="sec-title">Mejoras del Slug — Piezas: ${save.resources.slugParts||0}</div><div class="two-col"><div class="card"><div class="card-title">Inventario Nv${save.slug.inventoryLevel}</div><div class="card-desc">+1 inventario del Slug. Coste: ${slugUpgradeCost('inventory')}</div><button class="action-btn" onclick="buySlugUpgrade('inventory')">MEJORAR</button></div><div class="card"><div class="card-title">Pantallas Nv${save.slug.screensLevel}</div><div class="card-desc">+1 pantalla adicional. Coste: ${slugUpgradeCost('screens')}</div><button class="action-btn" onclick="buySlugUpgrade('screens')">MEJORAR</button></div><div class="card"><div class="card-title">Ruido Nv${save.slug.noiseLevel}</div><div class="card-desc">+0,05 multiplicador de ruido por nivel. Coste: ${slugUpgradeCost('noise')}</div><button class="action-btn" onclick="buySlugUpgrade('noise')">MEJORAR</button></div><div class="card"><div class="card-title">Apoyo de artillería</div><div class="card-desc">Tecla H durante expedición, área marcada, demora, enfriamiento y mucho ruido.</div><button class="action-btn" onclick="buySlugArtillery()" ${save.slug.artillery?'disabled':''}>${save.slug.artillery?'DESBLOQUEADO':'300 PIEZAS'}</button></div></div>`;}
+
 // ═══════════════════════════════════════════════════════════
 // BASE
 // ═══════════════════════════════════════════════════════════
@@ -4346,6 +4431,20 @@ const BASE_BUILDINGS={
     maxLevel:10,
     cost:lv=>500*(lv+1),
     benefit:lv=>`Nivel ${lv} — ${lv*2} trabajadores`,
+  },
+  portal_estrafalario:{
+    id:'portal_estrafalario',name:'Portal estrafalario',icon:'🌀',
+    desc:'Abre portales a otro mundo. Requiere 10.000 enemigos eliminados. Único.',
+    shape:['xoxo','oooo','oooo','xoxo'],maxLevel:1,unique:true,
+    cost:lv=>0,requires:()=>({ok:(+save.totalEnemyKills||0)>=10000,msg:`${Math.max(0,10000-(+save.totalEnemyKills||0))} bajas restantes`}),
+    benefit:lv=>'Portales a otro mundo habilitados',
+  },
+  modificador_virus:{
+    id:'modificador_virus',name:'Modificador de virus',icon:'🧪',
+    desc:'Mutaciones para caminantes aliados. Requiere completar Mansión Umbra.',
+    shape:['oooo','oxxo','oxxo','oooo'],maxLevel:1,unique:true,
+    cost:lv=>0,requires:()=>({ok:!!(save.portals&&save.portals.completed&&save.portals.completed.umbra_mansion),msg:'Completa Mansión Umbra'}),
+    benefit:lv=>`Suero: ${save.resources?.cultureSerum||0} — mutaciones preparadas`,
   },
   mina:{
     id:'mina',name:'Mina de BP',icon:'⛏️',
@@ -4471,7 +4570,7 @@ function renderBase(){
         }
         return fx;
       })():''}
-      ${'taller_armas taller_armaduras taller_mecanico'.includes(slot.buildingId)
+      ${'taller_armas taller_armaduras taller_mecanico modificador_virus'.includes(slot.buildingId)
           ?`<button class="action-btn" style="margin-top:4px;border-color:rgba(192,160,96,0.4);color:#c8a060" onclick="openWorkshop('${slot.buildingId}')">⚙ ABRIR TALLER</button>`:''}
       `;
     }
@@ -4486,9 +4585,10 @@ function openBuildMenu(slotIdx){
   const opts=Object.values(BASE_BUILDINGS);
   div.innerHTML=`<div style="font-size:9px;color:#5a5248;letter-spacing:2px;margin-bottom:8px">LOTE ${slotIdx+1} — ELEGIR</div>`
     +opts.map(b=>{
-      const can=save.bp>=b.cost(1);
+      const req=b.requires?b.requires():{ok:true,msg:''};
+      const can=save.bp>=b.cost(1)&&req.ok;
       return `<button class="action-btn" style="margin-bottom:5px;font-size:9px" onclick="buildSlot(${slotIdx},'${b.id}')" ${can?'':' disabled'}>
-        <span>${b.icon} ${b.name}</span><br><span style="opacity:0.6">${b.cost(1)} BP — HP ${buildingHpAtLevel(b.id,1,b.shape)} — ${b.desc}</span>
+        <span>${b.icon} ${b.name}</span><br><span style="opacity:0.6">${b.cost(1)} BP — HP ${buildingHpAtLevel(b.id,1,b.shape)} — ${b.desc}${req.ok?'':' — 🔒 '+req.msg}</span>
         <span class="structure-shape-row" style="justify-content:center">${renderBaseShape(b.shape)}<span class="structure-shape-label">4×4</span></span></button>`;
     }).join('')
     +`<button class="action-btn" style="margin-top:4px;font-size:9px;opacity:0.5" onclick="renderBase()">CANCELAR</button>`;
@@ -4502,11 +4602,14 @@ function buildSlot(slotIdx,buildingId){
     if(already){alert(`Solo puede haber un ${bdef.name}.`);renderBase();return;}
   }
   const b=BASE_BUILDINGS[buildingId];
+  const req=b&&b.requires?b.requires():{ok:true,msg:''};
+  if(!req.ok){alert('Requisito pendiente: '+req.msg);return;}
   const cost=b.cost(1);
   if(save.bp<cost){alert('BP insuficientes');return;}
   if(save.base[slotIdx]){alert('Este lote ya tiene una construcción');return;}
   save.bp-=cost;
   save.base[slotIdx]={buildingId,level:1,lastCollect:Date.now(),pendingBP:0,shape:shapeForSave(buildingId)};
+  if(buildingId==='portal_estrafalario')unlockPortalBuildingRewards();
   writeSave();renderBase();
 }
 
