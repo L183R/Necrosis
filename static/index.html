@@ -498,6 +498,7 @@ function normalizeSave(raw){
   merged.uniqueRewards=Object.assign({},DEFAULT_SAVE.uniqueRewards,(raw&&raw.uniqueRewards)||{});
   merged.slug=Object.assign({},DEFAULT_SAVE.slug,(raw&&raw.slug)||{});
   merged.totalEnemyKills=Math.max(0,Math.round(+merged.totalEnemyKills||0));
+  merged.highestFloor=Math.max(0,Math.round(+merged.highestFloor||0));
   ['enemies','weapons','armors','scenarios','modes','portals'].forEach(k=>{if(!merged.codex[k]||typeof merged.codex[k]!=='object'||Array.isArray(merged.codex[k]))merged.codex[k]={};});
   if(!merged.ownedArmorMods||typeof merged.ownedArmorMods!=='object'||Array.isArray(merged.ownedArmorMods))merged.ownedArmorMods={};
   merged.freeXP=Math.max(0,Math.round(+merged.freeXP||0));
@@ -1049,6 +1050,15 @@ function pickMissionType(){
   return MISSION_TYPES[0];
 }
 
+function highestFloorMultiplier(base){
+  const floor=Math.max(0,Math.floor(+(save&&save.highestFloor)||0));
+  return Math.pow(base,floor);
+}
+
+function enemyProgressRewardMultiplier(){return highestFloorMultiplier(1.1);}
+function enemyProgressCountMultiplier(){return highestFloorMultiplier(1.1);}
+function bossProgressHpMultiplier(){return highestFloorMultiplier(1.5);}
+
 function genRandomMission(idx){
   const size=MAP_SIZES[Math.floor(Math.random()*MAP_SIZES.length)];
   const density=DENSITIES[Math.floor(Math.random()*DENSITIES.length)];
@@ -1056,7 +1066,7 @@ function genRandomMission(idx){
   const mtype=pickMissionType();
   const floors=1+Math.floor(Math.random()*4);
   const floorTiles=Math.round(size.cols*size.rows*0.65);
-  const enemyCount=Math.max(1,Math.round(floorTiles*density.ratio*vehicleNoiseMul()*mtype.enemyMul));
+  const enemyCount=Math.max(1,Math.round(floorTiles*density.ratio*vehicleNoiseMul()*mtype.enemyMul*enemyProgressCountMultiplier()));
   // Jefe adds 1 floor (boss floor); Incursión adds extra depth from the beginning.
   const _floors=vehicleMaxFloors(floors)+(mtype.id==='jefe'?1:0)+(mtype.id==='incursion'?2:0);
   return {
@@ -3804,7 +3814,7 @@ function makeEnemy(t,pos,overrides={}){
   const spd=overrides.speed??Math.min(t.speed+gs.floor*0.03+gs.wave*0.01,ENEMY_MAX_SPD);
   const detect=overrides.detect??(t.detect??(t.screenDetect?Infinity:100+Math.random()*80));
   const mt=gs&&gs.mtype?gs.mtype:{};
-  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1,bpMul=mt.enemyBpMul||1;
+  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=(mt.enemyXpMul||1)*enemyProgressRewardMultiplier(),bpMul=(mt.enemyBpMul||1)*enemyProgressRewardMultiplier();
   const finalHp=Math.round(hp*hpMul);
   const finalMaxHp=Math.round((overrides.maxHp??hp)*hpMul);
   const finalDmg=Math.round((overrides.dmg??(t.dmg+gs.floor*2))*dmgMul);
@@ -4387,7 +4397,7 @@ function spawnBoss(kind='golem',index=0,total=1){
   const pos=findFreePos(60,cx+Math.round(Math.cos(ring)*5),cy+Math.round(Math.sin(ring)*4));
   const bossHp=300+gs.floor*50;
   const mt=gs&&gs.mtype?gs.mtype:{};
-  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1,bpMul=mt.enemyBpMul||1;
+  const hpMul=(mt.enemyHpMul||1)*bossProgressHpMultiplier(),dmgMul=mt.enemyDmgMul||1,xpMul=(mt.enemyXpMul||1)*enemyProgressRewardMultiplier(),bpMul=(mt.enemyBpMul||1)*enemyProgressRewardMultiplier();
   const finalBossHp=Math.round(bossHp*hpMul);
   gs.enemies.push({
     x:pos.x,y:pos.y,
