@@ -3914,6 +3914,7 @@ function spawnWave(){
   if(gs.exitDoor)gs.exitDoor.open=false;
   const mt=gs.mtype&&gs.mtype.id;
   gs._defenseUntil=mt==='defensa'?Date.now()+45000:0;
+  gs._defenseStartedAt=mt==='defensa'?Date.now():0;
   gs._defenseTargetCount=mt==='defensa'?(gs.waveEnemyCount||gs.enemies.length):0;
   if(mt==='purga')spawnPurgePortals();
   else gs._purgePortals=[];
@@ -3924,6 +3925,13 @@ function spawnWave(){
   showBanner('wave-banner',`Piso ${gs.floor} — ${_scName} — ${gs.waveEnemyCount||'?'} enemigos${_special}`);
 }
 
+
+const DEFENSE_ENEMY_DETECT_GROWTH_PER_SECOND=5;
+
+function defenseEnemyDetectBonus(now=Date.now()){
+  if(!gs||!(gs.mtype&&gs.mtype.id==='defensa')||!gs._defenseStartedAt)return 0;
+  return Math.max(0,((now-gs._defenseStartedAt)/1000)*DEFENSE_ENEMY_DETECT_GROWTH_PER_SECOND);
+}
 
 function spawnDefenseReplacement(){
   const target=gs._defenseTargetCount||gs.waveEnemyCount||0;
@@ -5298,7 +5306,7 @@ function update(dt){
     const edx=px-ex,edy=py-ey,dist=Math.hypot(edx,edy);
     // Detection: alert if in range (including noise bonus) or already alerted and dist<400.
     // El gólem atrae a los enemigos hacia él y toma prioridad sobre el jugador.
-    const effectiveDetect=e.detect+playerNoise;
+    const effectiveDetect=e.detect+playerNoise+defenseEnemyDetectBonus(now);
     if(targetGolem){e.alerted=true;}
     else if(invisible&&!e.isCannibal){e.alerted=false;}
     else if(!e.alerted&&(dist<effectiveDetect||e.screenDetect)) e.alerted=true;
