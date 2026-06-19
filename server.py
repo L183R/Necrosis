@@ -9,6 +9,10 @@ from typing import Dict, Any
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+
+TRISTARM_FINAL_XP_REWARD = 250_000
+TRISTARM_TOTAL_FLOORS = 16
+TRISTARM_PORTAL_KILL_REQUIREMENT = 10_000
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -29,6 +33,62 @@ class AuthPayload(BaseModel):
 
 class SavePayload(AuthPayload):
     save: Dict[str, Any]
+
+
+class TristarmPayload(AuthPayload):
+    floor: int | None = None
+    xp_bank: int | None = None
+    enemies_defeated: int | None = None
+    boss_id: str | None = None
+
+
+def _default_tristarm() -> Dict[str, Any]:
+    return {
+        "unlocked": False,
+        "completed": False,
+        "completion_count": 0,
+        "best_floor": 0,
+        "best_xp_bank": 0,
+        "active_run": False,
+        "current_floor": 1,
+        "xp_bank": 0,
+        "final_reward_claimed_for_current_run": False,
+        "floor_cleared": False,
+        "run_id": None,
+        "started_at": None,
+        "last_result": None,
+    }
+
+
+def _has_building(save: Dict[str, Any], building_id: str) -> bool:
+    base = save.get("base") if isinstance(save.get("base"), dict) else {}
+    return any(isinstance(b, dict) and b.get("buildingId") == building_id for b in base.values())
+
+
+def _ensure_tristarm(save: Dict[str, Any]) -> Dict[str, Any]:
+    tristarm = save.get("tristarm") if isinstance(save.get("tristarm"), dict) else {}
+    merged = {**_default_tristarm(), **tristarm}
+    for key in ("completion_count", "best_floor", "best_xp_bank", "current_floor", "xp_bank"):
+        merged[key] = max(0, int(merged.get(key) or 0))
+    if merged["current_floor"] < 1:
+        merged["current_floor"] = 1
+    merged["current_floor"] = min(TRISTARM_TOTAL_FLOORS, merged["current_floor"])
+    merged["unlocked"] = _has_building(save, "portal_estrafalario")
+    save["tristarm"] = merged
+    codex = save.setdefault("codex", {}) if isinstance(save.get("codex"), dict) else {}
+    codex.setdefault("portals", {})
+    codex.setdefault("modes", {})
+    codex.setdefault("enemies", {})
+    save["codex"] = codex
+    return merged
+
+
+def _persist_user_save(user: str, save: Dict[str, Any]) -> Dict[str, Any]:
+    accounts = load_accounts()
+    accounts[user]["save"] = normalize_account_save(save)
+    accounts[user]["updatedAt"] = int(time.time() * 1000)
+    write_accounts(accounts)
+    return accounts[user]["save"]
 
 
 def _clean_user(user: str) -> str:
@@ -67,6 +127,7 @@ def normalize_account_save(save: Dict[str, Any]) -> Dict[str, Any]:
     portals.setdefault("completed", {})
     portals.setdefault("tempXpBank", {"portalId": None, "floor": 0, "xp": 0})
     out["portals"] = portals
+    _ensure_tristarm(out)
     resources = out.get("resources") if isinstance(out.get("resources"), dict) else {}
     resources["cultureSerum"] = max(0, int(resources.get("cultureSerum") or 0))
     resources["slugParts"] = max(0, int(resources.get("slugParts") or 0))
@@ -141,11 +202,106 @@ async def save_game(payload: SavePayload):
     password = _clean_password(payload.password)
     accounts = load_accounts()
     require_account(user, password)
-    accounts[user]["save"] = normalize_account_save(payload.save)
+    incoming = normalize_account_save(payload.save)
+    current = normalize_account_save(accounts[user].get("save") or {})
+    current_tristarm = current.get("tristarm", {})
+    if current_tristarm.get("active_run"):
+        # Tristarm economy is server-authoritative while a run is active.
+        # Regular saves may persist inventory/ammo, but cannot overwrite the bank/floor/reward flags.
+        incoming["tristarm"] = current_tristarm
+    accounts[user]["save"] = normalize_account_save(incoming)
     accounts[user]["updatedAt"] = int(time.time() * 1000)
     write_accounts(accounts)
     return {"ok": True}
 
+
+
+def _require_tristarm_access(save: Dict[str, Any]):
+    tristarm = _ensure_tristarm(save)
+    if not _has_building(save, "portal_estrafalario"):
+        raise HTTPException(status_code=403, detail="Tristarm requiere construir el Portal estrafalario (10.000 bajas totales).")
+    return tristarm
+
+
+@app.post("/api/tristarm/start")
+async def tristarm_start(payload: TristarmPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    tristarm = _require_tristarm_access(save)
+    if tristarm.get("active_run"):
+        raise HTTPException(status_code=409, detail="Ya hay una run de Tristarm activa.")
+    tristarm.update({"active_run": True, "current_floor": 1, "xp_bank": 0, "final_reward_claimed_for_current_run": False, "floor_cleared": False, "run_id": secrets.token_hex(8), "started_at": int(time.time()*1000), "last_result": None})
+    save["codex"]["portals"]["tristarm"] = "played"
+    save["codex"]["modes"]["tristarm"] = "played"
+    return {"ok": True, "save": _persist_user_save(user, save)}
+
+
+@app.post("/api/tristarm/sync")
+async def tristarm_sync(payload: TristarmPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    tristarm = _require_tristarm_access(save)
+    if not tristarm.get("active_run"):
+        raise HTTPException(status_code=409, detail="No hay una run de Tristarm activa.")
+    floor = int(payload.floor or tristarm["current_floor"])
+    if floor < 1 or floor > TRISTARM_TOTAL_FLOORS or floor < int(tristarm["current_floor"]):
+        raise HTTPException(status_code=400, detail="Piso de Tristarm inválido.")
+    tristarm["current_floor"] = floor
+    tristarm["xp_bank"] = max(int(tristarm.get("xp_bank") or 0), max(0, int(payload.xp_bank or 0)))
+    tristarm["best_floor"] = max(tristarm["best_floor"], floor)
+    tristarm["best_xp_bank"] = max(tristarm["best_xp_bank"], tristarm["xp_bank"])
+    return {"ok": True, "save": _persist_user_save(user, save)}
+
+
+@app.post("/api/tristarm/retire")
+async def tristarm_retire(payload: TristarmPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    tristarm = _require_tristarm_access(save)
+    if not tristarm.get("active_run"):
+        raise HTTPException(status_code=409, detail="No hay una run activa para retirarse.")
+    bank = max(int(tristarm.get("xp_bank") or 0), max(0, int(payload.xp_bank or 0)))
+    delivered = bank // 2
+    save["freeXP"] = max(0, int(save.get("freeXP") or 0)) + delivered
+    tristarm.update({"active_run": False, "xp_bank": 0, "floor_cleared": False, "final_reward_claimed_for_current_run": False, "last_result": {"type":"retire","xp_delivered":delivered,"xp_lost":bank-delivered}})
+    return {"ok": True, "xp_delivered": delivered, "save": _persist_user_save(user, save)}
+
+
+@app.post("/api/tristarm/death")
+async def tristarm_death(payload: TristarmPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    tristarm = _ensure_tristarm(save)
+    lost = int(tristarm.get("xp_bank") or 0)
+    tristarm.update({"active_run": False, "xp_bank": 0, "floor_cleared": False, "final_reward_claimed_for_current_run": False, "last_result": {"type":"death","xp_lost":lost}})
+    return {"ok": True, "xp_lost": lost, "save": _persist_user_save(user, save)}
+
+
+@app.post("/api/tristarm/victory")
+async def tristarm_victory(payload: TristarmPayload):
+    user = _clean_user(payload.user); password = _clean_password(payload.password)
+    account = require_account(user, password)
+    save = normalize_account_save(account.get("save") or {})
+    tristarm = _require_tristarm_access(save)
+    if not tristarm.get("active_run") or int(tristarm.get("current_floor") or 0) != TRISTARM_TOTAL_FLOORS:
+        raise HTTPException(status_code=409, detail="La recompensa final requiere una run activa en el piso 16.")
+    if tristarm.get("final_reward_claimed_for_current_run"):
+        raise HTTPException(status_code=409, detail="La recompensa final de esta run ya fue cobrada.")
+    if payload.boss_id != "tristarm_final_demon":
+        raise HTTPException(status_code=403, detail="Victoria inválida: falta derrotar al jefe final.")
+    bank = max(int(tristarm.get("xp_bank") or 0), max(0, int(payload.xp_bank or 0)))
+    total = bank + TRISTARM_FINAL_XP_REWARD
+    save["freeXP"] = max(0, int(save.get("freeXP") or 0)) + total
+    save.setdefault("portals", {}).setdefault("completed", {})["tristarm"] = True
+    save.setdefault("uniqueRewards", {})["tristarmFirst"] = True
+    save["codex"]["portals"]["tristarm"] = "defeated"
+    save["codex"]["enemies"]["tristarm_final_demon"] = "defeated"
+    tristarm.update({"active_run": False, "completed": True, "completion_count": int(tristarm.get("completion_count") or 0)+1, "best_floor": TRISTARM_TOTAL_FLOORS, "best_xp_bank": max(int(tristarm.get("best_xp_bank") or 0), bank), "xp_bank": 0, "floor_cleared": False, "final_reward_claimed_for_current_run": True, "last_result": {"type":"victory","xp_bank":bank,"final_reward":TRISTARM_FINAL_XP_REWARD,"xp_delivered":total}})
+    return {"ok": True, "xp_delivered": total, "final_reward": TRISTARM_FINAL_XP_REWARD, "save": _persist_user_save(user, save)}
 
 @app.post("/api/reset")
 async def reset_game(payload: AuthPayload):
