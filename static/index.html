@@ -4598,17 +4598,77 @@ function gameLoop(ts){
   update(dt);draw();updateHUD();
 }
 
+const BASE_VISIBILITY_RADIUS=230;
+const BLACKOUT_CONE_ANGLE=Math.PI*0.48;
+const BLACKOUT_PENUMBRA_ANGLE=Math.PI*0.62;
+
+function raycastVisibilityHit(ox,oy,angle,range){
+  const step=6;
+  const dx=Math.cos(angle),dy=Math.sin(angle);
+  let lastX=ox,lastY=oy;
+  for(let dist=0;dist<=range;dist+=step){
+    const x=ox+dx*dist,y=oy+dy*dist;
+    if(isWall(x,y,false)){
+      return {x:lastX,y:lastY,dist:Math.hypot(lastX-ox,lastY-oy)};
+    }
+    lastX=x;lastY=y;
+  }
+  return {x:ox+dx*range,y:oy+dy*range,dist:range};
+}
+
+function buildVisibilityPolygon(ox,oy,facing,range,angleWidth,rays){
+  const pts=[{x:ox,y:oy,dist:0}];
+  const start=facing-angleWidth/2;
+  for(let i=0;i<=rays;i++){
+    pts.push(raycastVisibilityHit(ox,oy,start+(angleWidth*i/rays),range));
+  }
+  return pts;
+}
+
+function cutVisibilityPolygon(pts,ox,oy,range,alpha){
+  if(!pts||pts.length<3)return;
+  ctx.save();
+  ctx.globalCompositeOperation='destination-out';
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+  ctx.closePath();
+  ctx.clip();
+  const grd=ctx.createRadialGradient(ox,oy,0,ox,oy,range);
+  grd.addColorStop(0,`rgba(0,0,0,${alpha})`);
+  grd.addColorStop(0.72,`rgba(0,0,0,${alpha*0.95})`);
+  grd.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=grd;
+  ctx.fillRect(ox-range,oy-range,range*2,range*2);
+  ctx.restore();
+}
+
 function drawMissionVisibilityOverlay(){
-  if(!gs||!(gs.mtype&&gs.mtype.id==='apagon'))return;
+  if(!gs||!gs.player)return;
   const p=gs.player;
   const sx=p.x+p.w/2-gs.camera.x,sy=p.y+p.h/2-gs.camera.y;
-  // Keep blackout missions playable: the map should stay visible enough to
-  // orient yourself while the area outside the flashlight remains dangerous.
-  const grd=ctx.createRadialGradient(sx,sy,70,sx,sy,230);
-  grd.addColorStop(0,'rgba(0,0,0,0)');
-  grd.addColorStop(0.55,'rgba(0,0,0,0.38)');
-  grd.addColorStop(1,'rgba(0,0,0,0.86)');
-  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);ctx.restore();
+  const isBlackout=!!(gs.mtype&&gs.mtype.id==='apagon');
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  if(!isBlackout){
+    const grd=ctx.createRadialGradient(sx,sy,70,sx,sy,BASE_VISIBILITY_RADIUS);
+    grd.addColorStop(0,'rgba(0,0,0,0)');
+    grd.addColorStop(0.55,'rgba(0,0,0,0.38)');
+    grd.addColorStop(1,'rgba(0,0,0,0.86)');
+    ctx.fillStyle=grd;
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+    return;
+  }
+
+  ctx.fillStyle='rgba(0,0,0,1)';
+  ctx.fillRect(0,0,W,H);
+  const ox=p.x+p.w/2,oy=p.y+p.h/2;
+  const facing=Math.atan2((gs.mouseY+gs.camera.y)-oy,(gs.mouseX+gs.camera.x)-ox);
+  const screenPts=pts=>pts.map(pt=>({x:pt.x-gs.camera.x,y:pt.y-gs.camera.y,dist:pt.dist}));
+  cutVisibilityPolygon(screenPts(buildVisibilityPolygon(ox,oy,facing,BASE_VISIBILITY_RADIUS,BLACKOUT_PENUMBRA_ANGLE,72)),sx,sy,BASE_VISIBILITY_RADIUS,0.28);
+  cutVisibilityPolygon(screenPts(buildVisibilityPolygon(ox,oy,facing,BASE_VISIBILITY_RADIUS,BLACKOUT_CONE_ANGLE,96)),sx,sy,BASE_VISIBILITY_RADIUS,1);
+  ctx.restore();
 }
 
 function updateMissionHazards(dt){
