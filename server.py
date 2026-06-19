@@ -55,6 +55,36 @@ def load_accounts() -> Dict[str, Dict[str, Any]]:
     return data if isinstance(data, dict) else {}
 
 
+
+def normalize_account_save(save: Dict[str, Any]) -> Dict[str, Any]:
+    """Server-side compatibility/defaults for old NECROSIS saves."""
+    if not isinstance(save, dict):
+        return {}
+    out = dict(save)
+    out["totalEnemyKills"] = max(0, int(out.get("totalEnemyKills") or 0))
+    portals = out.get("portals") if isinstance(out.get("portals"), dict) else {}
+    portals.setdefault("unlocked", {})
+    portals.setdefault("completed", {})
+    portals.setdefault("tempXpBank", {"portalId": None, "floor": 0, "xp": 0})
+    out["portals"] = portals
+    resources = out.get("resources") if isinstance(out.get("resources"), dict) else {}
+    resources["cultureSerum"] = max(0, int(resources.get("cultureSerum") or 0))
+    resources["slugParts"] = max(0, int(resources.get("slugParts") or 0))
+    out["resources"] = resources
+    out.setdefault("walkerMutations", {"hp": 0, "damage": 0, "speed": 0, "regen": 0, "resistance": 0, "deathExplosion": 0, "behavior": 0})
+    out.setdefault("uniqueRewards", {"umbraFirst": False, "steelFrontFirst": False, "tristarmFirst": False})
+    slug = out.get("slug") if isinstance(out.get("slug"), dict) else {}
+    slug.setdefault("owned", False)
+    slug["inventoryLevel"] = max(0, int(slug.get("inventoryLevel") or 0))
+    slug["screensLevel"] = max(0, int(slug.get("screensLevel") or 0))
+    slug["noiseLevel"] = max(0, int(slug.get("noiseLevel") or 0))
+    slug.setdefault("artillery", False)
+    out["slug"] = slug
+    codex = out.get("codex") if isinstance(out.get("codex"), dict) else {}
+    codex.setdefault("portals", {})
+    out["codex"] = codex
+    return out
+
 def write_accounts(accounts: Dict[str, Dict[str, Any]]) -> None:
     DATA_FILE.write_text(json.dumps(accounts, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -102,7 +132,7 @@ async def login(payload: AuthPayload):
     user = _clean_user(payload.user)
     password = _clean_password(payload.password)
     account = require_account(user, password)
-    return {"ok": True, "user": user, "save": account.get("save")}
+    return {"ok": True, "user": user, "save": normalize_account_save(account.get("save")) if account.get("save") else None}
 
 
 @app.post("/api/save")
@@ -111,7 +141,7 @@ async def save_game(payload: SavePayload):
     password = _clean_password(payload.password)
     accounts = load_accounts()
     require_account(user, password)
-    accounts[user]["save"] = payload.save
+    accounts[user]["save"] = normalize_account_save(payload.save)
     accounts[user]["updatedAt"] = int(time.time() * 1000)
     write_accounts(accounts)
     return {"ok": True}
