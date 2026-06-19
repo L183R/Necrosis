@@ -4746,11 +4746,27 @@ function cutVisibilityPolygon(pts,ox,oy,range,alpha){
   ctx.restore();
 }
 
+function isBlackoutMission(){return !!(gs&&gs.mtype&&gs.mtype.id==='apagon');}
+
+function isPointInBlackoutLight(x,y){
+  if(!gs||!gs.player)return true;
+  if(!isBlackoutMission())return true;
+  const p=gs.player;
+  const ox=p.x+p.w/2,oy=p.y+p.h/2;
+  const dx=x-ox,dy=y-oy,dist=Math.hypot(dx,dy);
+  if(dist>BASE_VISIBILITY_RADIUS)return false;
+  const facing=Math.atan2((gs.mouseY+gs.camera.y)-oy,(gs.mouseX+gs.camera.x)-ox);
+  const delta=Math.atan2(Math.sin(Math.atan2(dy,dx)-facing),Math.cos(Math.atan2(dy,dx)-facing));
+  if(Math.abs(delta)>BLACKOUT_PENUMBRA_ANGLE/2)return false;
+  const hit=raycastVisibilityHit(ox,oy,Math.atan2(dy,dx),dist);
+  return hit.dist>=dist-8;
+}
+
 function drawMissionVisibilityOverlay(){
   if(!gs||!gs.player)return;
   const p=gs.player;
   const sx=p.x+p.w/2-gs.camera.x,sy=p.y+p.h/2-gs.camera.y;
-  const isBlackout=!!(gs.mtype&&gs.mtype.id==='apagon');
+  const isBlackout=isBlackoutMission();
   ctx.save();
   ctx.setTransform(1,0,0,1,0,0);
   if(!isBlackout){
@@ -5260,8 +5276,11 @@ function draw(){
     else{ctx.beginPath();ctx.arc(pt.x,pt.y,pt.r*pt.life,0,Math.PI*2);ctx.fillStyle=`${pt.color}${Math.floor(pt.life*220).toString(16).padStart(2,'0')}`;ctx.fill();}
   }
   // NPC drawn after player (see below)
+  const blackoutActive=isBlackoutMission();
+  if(blackoutActive)drawMissionVisibilityOverlay();
   // Enemies
   for(const e of gs.enemies){
+    if(blackoutActive&&!isPointInBlackoutLight(e.x+e.size/2,e.y+e.size/2))continue;
     const wb=e.wobble,now2=Date.now();ctx.save();ctx.translate(e.x+e.size/2,e.y+e.size/2);
     if(e.ghost)ctx.globalAlpha=0.68;
     if(e.isCannibal){ctx.shadowColor='#ff3018';ctx.shadowBlur=14;}
@@ -5304,7 +5323,7 @@ function draw(){
     else if(b.type==='lightning'){ctx.strokeStyle='#90e0ff';ctx.lineWidth=3;ctx.shadowColor='#40a0ff';ctx.shadowBlur=10;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(b.x,b.y,b.r*0.4,0,Math.PI*2);ctx.fill();}
     ctx.restore();
   }
-  drawMissionVisibilityOverlay();
+  if(!blackoutActive)drawMissionVisibilityOverlay();
   // Player
   const p=gs.player,now=Date.now();
   ctx.save();ctx.translate(p.x+p.w/2,p.y+p.h/2);
