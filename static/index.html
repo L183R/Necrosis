@@ -654,8 +654,65 @@ let saveTimer=null;
 async function apiPost(path,payload){
   const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   let data=null;try{data=await res.json();}catch(e){}
-  if(!res.ok)throw new Error((data&&data.detail)||'Error del servidor');
+  if(!res.ok){
+    const err=new Error((data&&data.detail)||res.statusText||'Error del servidor');
+    err.status=res.status;
+    err.path=path;
+    throw err;
+  }
   return data||{};
+}
+function canUseLocalTristarmFallback(err){return err&&err.status===404&&String(err.path||'').startsWith('/api/tristarm/');}
+function localTristarmResult(action,extra={}){
+  save.tristarm=Object.assign({},DEFAULT_SAVE.tristarm,save.tristarm||{});
+  save.portals=Object.assign({},DEFAULT_SAVE.portals,save.portals||{});
+  save.portals.completed=Object.assign({},DEFAULT_SAVE.portals.completed,save.portals.completed||{});
+  save.portals.tempXpBank=Object.assign({},DEFAULT_SAVE.portals.tempXpBank,save.portals.tempXpBank||{});
+  save.codex=Object.assign({},DEFAULT_SAVE.codex,save.codex||{});
+  save.uniqueRewards=Object.assign({},DEFAULT_SAVE.uniqueRewards,save.uniqueRewards||{});
+  ['enemies','modes','portals'].forEach(k=>{if(!save.codex[k]||typeof save.codex[k]!=='object')save.codex[k]={};});
+  const t=save.tristarm;
+  if(action==='start'){
+    Object.assign(t,{unlocked:true,active_run:true,current_floor:1,xp_bank:0,final_reward_claimed_for_current_run:false,floor_cleared:false,last_result:null});
+    save.codex.portals.tristarm='played';save.codex.modes.tristarm='played';
+    writeSave();
+    return {ok:true,save};
+  }
+  if(action==='sync'){
+    const floor=Math.min(TRISTARM_TOTAL_FLOORS,Math.max(1,Math.round(+extra.floor||t.current_floor||1)));
+    const bank=Math.max(0,Math.round(+extra.xp_bank||0));
+    Object.assign(t,{active_run:true,current_floor:floor,xp_bank:Math.max(+t.xp_bank||0,bank),best_floor:Math.max(+t.best_floor||0,floor),best_xp_bank:Math.max(+t.best_xp_bank||0,bank)});
+    save.portals.tempXpBank={portalId:'tristarm',floor,xp:t.xp_bank};
+    writeSave();
+    return {ok:true,save};
+  }
+  if(action==='retire'){
+    const bank=Math.max(+t.xp_bank||0,Math.round(+extra.xp_bank||0));
+    const delivered=Math.floor(bank/2);
+    save.freeXP=Math.max(0,+save.freeXP||0)+delivered;
+    Object.assign(t,{active_run:false,xp_bank:0,floor_cleared:false,final_reward_claimed_for_current_run:false,last_result:{type:'retire',xp_delivered:delivered,xp_lost:bank-delivered}});
+    save.portals.tempXpBank={portalId:null,floor:0,xp:0};
+    writeSave();
+    return {ok:true,xp_delivered:delivered,save};
+  }
+  if(action==='death'){
+    const lost=Math.max(+t.xp_bank||0,Math.round(+extra.xp_bank||0));
+    Object.assign(t,{active_run:false,xp_bank:0,floor_cleared:false,final_reward_claimed_for_current_run:false,last_result:{type:'death',xp_lost:lost}});
+    save.portals.tempXpBank={portalId:null,floor:0,xp:0};
+    writeSave();
+    return {ok:true,xp_lost:lost,save};
+  }
+  if(action==='victory'){
+    const bank=Math.max(+t.xp_bank||0,Math.round(+extra.xp_bank||0));
+    const total=bank+TRISTARM_FINAL_XP_REWARD;
+    save.freeXP=Math.max(0,+save.freeXP||0)+total;save.portals.completed.tristarm=true;save.uniqueRewards.tristarmFirst=true;
+    save.codex.portals.tristarm='defeated';save.codex.enemies.tristarm_final_demon='defeated';
+    Object.assign(t,{active_run:false,completed:true,completion_count:(+t.completion_count||0)+1,best_floor:TRISTARM_TOTAL_FLOORS,best_xp_bank:Math.max(+t.best_xp_bank||0,bank),xp_bank:0,floor_cleared:false,final_reward_claimed_for_current_run:true,last_result:{type:'victory',xp_bank:bank,final_reward:TRISTARM_FINAL_XP_REWARD,xp_delivered:total}});
+    save.portals.tempXpBank={portalId:null,floor:0,xp:0};
+    writeSave();
+    return {ok:true,xp_delivered:total,final_reward:TRISTARM_FINAL_XP_REWARD,save};
+  }
+  throw new Error('Acción de Tristarm no disponible.');
 }
 function writeSave(){
   if(!currentAuth)return;
@@ -666,7 +723,14 @@ function writeSave(){
 async function tristarmApi(action,extra={}){
   if(!currentAuth)throw new Error('Sesión requerida.');
   const payload={user:currentAuth.user,password:currentAuth.password,...extra};
-  const data=await apiPost('/api/tristarm/'+action,payload);
+  let data;
+  try{
+    data=await apiPost('/api/tristarm/'+action,payload);
+  }catch(e){
+    if(!canUseLocalTristarmFallback(e))throw e;
+    addLog('Servidor sin API de Tristarm; usando guardado local compatible.');
+    data=localTristarmResult(action,extra);
+  }
   if(data.save)save=loadSave(data.save);
   updateMenuInfo();
   return data;
