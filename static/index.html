@@ -174,6 +174,7 @@ canvas{display:block;position:fixed;inset:0}
 </head>
 <body>
 <canvas id="game"></canvas>
+<audio id="bg-music" src="/static/necrosis.mp3" preload="auto" loop></audio>
 <div id="vehicle-intro" class="hidden">
   <div id="vehicle-intro-label">Preparando expedición<span id="vehicle-intro-name"></span></div>
   <div id="vehicle-intro-road"></div>
@@ -520,6 +521,7 @@ function loadSave(raw){return normalizeSave(raw);}
 // AUDIO — procedural sound effects (no external assets)
 // ═══════════════════════════════════════════════════════════
 const SFX={ctx:null,enabled:localStorage.getItem('necrosis_sfx')!=='off',master:null,unlocked:false};
+const MUSIC={el:null,volume:0.38};
 function initAudio(){
   if(SFX.ctx)return SFX.ctx;
   const AC=window.AudioContext||window.webkitAudioContext;
@@ -536,6 +538,30 @@ function unlockAudio(){
   if(ctx&&ctx.state==='suspended')ctx.resume();
   SFX.unlocked=!!ctx;
 }
+function getMusic(){
+  if(!MUSIC.el){
+    MUSIC.el=document.getElementById('bg-music');
+    if(MUSIC.el)MUSIC.el.volume=MUSIC.volume;
+  }
+  return MUSIC.el;
+}
+function playMusic(){
+  const audio=getMusic();
+  if(!audio||!SFX.enabled)return;
+  audio.volume=MUSIC.volume;
+  const playPromise=audio.play();
+  if(playPromise&&typeof playPromise.catch==='function')playPromise.catch(()=>{});
+}
+function stopMusic(){
+  const audio=getMusic();
+  if(!audio)return;
+  audio.pause();
+  audio.currentTime=0;
+}
+function syncMusicWithScreen(){
+  if(currentScreen==='game'&&SFX.enabled)playMusic();
+  else stopMusic();
+}
 function updateSoundButton(){
   const btn=document.getElementById('sound-toggle-btn');
   if(btn)btn.textContent=SFX.enabled?'🔊 SONIDO ON':'🔇 SONIDO OFF';
@@ -545,7 +571,8 @@ function toggleSoundFX(){
   localStorage.setItem('necrosis_sfx',SFX.enabled?'on':'off');
   unlockAudio();
   updateSoundButton();
-  if(SFX.enabled)playSfx('ui');
+  if(SFX.enabled){playSfx('ui');syncMusicWithScreen();}
+  else stopMusic();
 }
 function tone(freq,dur=0.08,type='sine',vol=0.5,delay=0,slideTo=null){
   if(!SFX.enabled)return;
@@ -1876,6 +1903,7 @@ function showScreen(name){
   if(name==='mission')renderMissionSelect();
   if(name==='game')startGame();
   currentScreen=name;
+  syncMusicWithScreen();
 }
 function updateMenuInfo(){
   const s=save;
@@ -2855,8 +2883,9 @@ function buildWeaponState(){
   return ws;
 }
 
-function startGame(){_victoryShown=false;_victorySnapshot=null;document.getElementById('victory-modal').style.display='none';setupInput();initGame();if(!loopRunning){loopRunning=true;requestAnimationFrame(gameLoop);}}
+function startGame(){_victoryShown=false;_victorySnapshot=null;document.getElementById('victory-modal').style.display='none';unlockAudio();setupInput();initGame();playMusic();if(!loopRunning){loopRunning=true;requestAnimationFrame(gameLoop);}}
 function stopGame(){
+  stopMusic();
   gs=null;
   _victoryShown=false;
   _victorySnapshot=null;
