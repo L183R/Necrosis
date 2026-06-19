@@ -4317,7 +4317,7 @@ function damageEnemy(e,dmg,stun,opts={}){
   spawnDmgNumber(e.x+e.size/2,e.y,dmg,false);
   spawnBloodParticles(e.x+e.size/2,e.y+e.size/2,e.color);
   playSfx('hit');
-  if(e.hp<=0)killEnemy(e,{noReward:!!opts.noReward});
+  if(e.hp<=0)killEnemy(e,{noReward:!!opts.noReward,weaponType:opts.weaponType});
 }
 function killEnemy(e,opts={}){
   const p=gs.player;
