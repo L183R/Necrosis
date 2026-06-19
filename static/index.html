@@ -474,7 +474,8 @@ const DEFAULT_SAVE={
   totalEnemyKills:0,
   portals:{unlocked:{},completed:{},tempXpBank:{portalId:null,floor:0,xp:0}},
   tristarm:{unlocked:false,completed:false,completion_count:0,best_floor:0,best_xp_bank:0,active_run:false,current_floor:1,xp_bank:0,final_reward_claimed_for_current_run:false,floor_cleared:false,last_result:null},
-  resources:{cultureSerum:0,slugParts:0},
+  mansion_umbra:{unlocked:false,completed:false,completion_count:0,active_run:false,map_seed:null,player_position:null,keys:[],opened_doors:[],activated_mechanisms:[],serum_found:0,subject_zero_state:{hp:0,downed:false,position:null,regeneration_end:null},first_clear_reward_claimed:false,stats:{best_time_ms:null,rooms_explored:0,keys_found:0,subject_zero_downs:0,serum_total_obtained:0,special_enemies_defeated:0}},
+  resources:{cultureSerum:0,mutagenicSerum:0,slugParts:0},
   walkerMutations:{hp:0,damage:0,speed:0,regen:0,resistance:0,deathExplosion:0,behavior:0},
   uniqueRewards:{umbraFirst:false,steelFrontFirst:false,tristarmFirst:false},
   slug:{owned:false,inventoryLevel:0,screensLevel:0,noiseLevel:0,artillery:false},
@@ -498,6 +499,10 @@ function normalizeSave(raw){
   merged.portals.completed=Object.assign({},DEFAULT_SAVE.portals.completed,merged.portals.completed||{});
   merged.portals.tempXpBank=Object.assign({},DEFAULT_SAVE.portals.tempXpBank,merged.portals.tempXpBank||{});
   merged.tristarm=Object.assign({},DEFAULT_SAVE.tristarm,(raw&&raw.tristarm)||{});
+  merged.mansion_umbra=Object.assign({},DEFAULT_SAVE.mansion_umbra,(raw&&raw.mansion_umbra)||{});
+  merged.mansion_umbra.subject_zero_state=Object.assign({},DEFAULT_SAVE.mansion_umbra.subject_zero_state,merged.mansion_umbra.subject_zero_state||{});
+  merged.mansion_umbra.stats=Object.assign({},DEFAULT_SAVE.mansion_umbra.stats,merged.mansion_umbra.stats||{});
+  ['keys','opened_doors','activated_mechanisms'].forEach(k=>{if(!Array.isArray(merged.mansion_umbra[k]))merged.mansion_umbra[k]=[];});
   merged.tristarm.xp_bank=Math.max(0,Math.round(+merged.tristarm.xp_bank||0));
   merged.tristarm.current_floor=Math.min(16,Math.max(1,Math.round(+merged.tristarm.current_floor||1)));
   merged.resources=Object.assign({},DEFAULT_SAVE.resources,(raw&&raw.resources)||{});
@@ -647,10 +652,14 @@ const TRISTARM_MAX_SIMULTANEOUS_ENEMIES=30;
 const TRISTARM_BASE_ENEMY_COUNT=8;
 const TRISTARM_ENEMY_COUNT_MULTIPLIER=6;
 const TRISTARM_MAP_SIZE={cols:72,rows:48};
+const MANSION_UMBRA_MAP_SIZE={cols:48,rows:48};
+const MANSION_UMBRA_FIRST_CLEAR_SERUM=25, MANSION_UMBRA_REPEAT_CLEAR_SERUM=8, MANSION_UMBRA_SAMPLE_SERUM=2;
+const SUBJECT_ZERO={hp:1800,dmg:34,speed:1.05,downMs:9000,detect:9999,regenSpeedMul:1.08};
 let tristarmFloorDecisionPending=false;
 function tristarmFloorMultipliers(floor){return {enemyCountMultiplier:Math.pow(1.2,floor-1),enemyHpMultiplier:Math.pow(1.1,floor-1),enemyDamageMultiplier:Math.pow(1.1,floor-1)};}
 function tristarmEnemyCount(floor){return Math.max(1,Math.round(TRISTARM_BASE_ENEMY_COUNT*TRISTARM_ENEMY_COUNT_MULTIPLIER*tristarmFloorMultipliers(floor).enemyCountMultiplier));}
 function isTristarmActive(){return activeMission&&activeMission.id==='tristarm';}
+function isMansionUmbraActive(){return activeMission&&activeMission.id==='mansion_umbra';}
 let currentAuth=null;
 let save=loadSave();
 let saveTimer=null;
@@ -1845,17 +1854,19 @@ function syncCodexFromSave(){
   (save.ownedArmors||[]).forEach(a=>codexDiscover('armors',a.shopId||a.id,'owned'));
 }
 const CODEX_TABS=[
-  {id:'enemies',label:'Enemigos'}, {id:'weapons',label:'Armas'}, {id:'armors',label:'Armaduras'}, {id:'scenarios',label:'Escenarios'}, {id:'modes',label:'Modos'}
+  {id:'enemies',label:'Enemigos'}, {id:'weapons',label:'Armas'}, {id:'armors',label:'Armaduras'}, {id:'scenarios',label:'Escenarios'}, {id:'modes',label:'Modos'}, {id:'portals',label:'Portales'}
 ];
 let codexTab='enemies';
 function codexEntries(tab){
   if(tab==='weapons')return WEAPON_CAT.map(w=>({id:w.id,name:w.name,icon:w.icon,desc:`${w.type==='melee'?'Melee':'Distancia'} — Daño ${w.dmg}, rango ${w.range}, cadencia ${w.speed}ms.`}));
   if(tab==='armors')return ARMOR_CAT.map(a=>({id:a.id,name:a.name,icon:a.icon,desc:`${a.desc} HP+${a.bonusHp}, MP+${a.bonusMp}, bolsillos ${a.pockets}.`}));
   if(tab==='scenarios')return SCENARIO_TYPES.concat([{id:'arena_jefes',name:'Arena de Jefes',icon:'💀',loot:{}}]).map(sc=>({id:sc.id,name:sc.name,icon:sc.icon,desc:`Escenario con botín preferente: ${Object.keys(sc.loot||{}).join(', ')||'sin cofres'}.`}));
-  if(tab==='modes')return MISSION_TYPES.concat([{id:'boss_test',name:'Prueba de Jefes',icon:'💀',desc:'Arena especial para enfrentar jefes.',chestMul:0,enemyMul:1}]).map(m=>({id:m.id,name:m.name,icon:m.icon,desc:m.desc}));
+  if(tab==='modes')return MISSION_TYPES.concat([{id:'boss_test',name:'Prueba de Jefes',icon:'💀',desc:'Arena especial para enfrentar jefes.',chestMul:0,enemyMul:1},{id:'mansion_umbra',name:'Mansión Umbra',icon:'🏚️',desc:'Portal survival horror de llaves, mecanismos y persecución.'}]).map(m=>({id:m.id,name:m.name,icon:m.icon,desc:m.desc}));
+  if(tab==='portals')return OTHERWORLD_PORTALS.map(p=>({id:p.id,name:p.name,icon:p.id==='tristarm'?'🔥':p.id==='mansion_umbra'?'🏚️':'🎖️',desc:p.desc+' Recompensa: '+p.reward}));
   const base=ENEMY_TYPES.map(e=>({id:e.id,name:e.name,icon:e.ghost?'👻':e.kamikaze?'💥':e.speed>1.4?'🏃':'🧟',desc:`HP ${e.hp}, daño ${e.dmg}, velocidad ${e.speed}. ${e.splitOnDeath?'Se divide al morir. ':''}${e.kamikaze?'Explota al acercarse. ':''}${e.packAura?'Potencia a la horda cercana. ':''}`}));
   return base.concat([
     {id:'canibal',name:'Caníbal',icon:'🍖',desc:'Depredador raro que detecta desde lejos y persigue sin descanso.'},
+    {id:'subject_zero',name:'Sujeto Cero',icon:'◉',desc:'Perseguidor inmortal de Mansión Umbra. Se derriba sin XP/BP y se regenera.'},
     {id:'boss_golem',name:'JEFE GÓLEM',icon:'🪨',desc:'Jefe enorme, lento y resistente.'},
     {id:'boss_summoner',name:'JEFE INVOCADOR',icon:'🔮',desc:'Jefe que invoca refuerzos durante la pelea.'},
     {id:'boss_splitter',name:'JEFE FISIBLE',icon:'🧬',desc:'Jefe que se fragmenta en amenazas menores.'},
@@ -3261,6 +3272,7 @@ function parseMap(template){
 // ═══════════════════════════════════════════════════════════
 function generateMap(){
   // Build map from mission mapSize (variable dimensions), or fall back to templates
+  if(isMansionUmbraActive()){setupMansionUmbraRun();return;}
   const ms=activeMission&&activeMission.mapSize;
   if(ms){
     gs.map=buildSizedMap(ms.cols,ms.rows);
@@ -3408,6 +3420,7 @@ function isWall(px,py,forEnemy){
     return !(gs.exitDoor&&gs.exitDoor.open);
   }
   if(!gs.map[ty])return true;
+  if(isMansionUmbraActive()&&gs.mansionDoors){const door=gs.mansionDoors.find(d=>!d.open&&d.tx===tx&&d.ty===ty);if(door)return true;}
   const cell=gs.map[ty][tx];
   // Door tile (rightmost open column near center): block enemies, allow player if door open
   if(forEnemy&&cell===0&&tx===mw-1)return true;
@@ -4463,6 +4476,7 @@ function damageEnemy(e,dmg,stun,opts={}){
   if(e.hp<=0)killEnemy(e,{noReward:!!opts.noReward,weaponType:opts.weaponType});
 }
 function killEnemy(e,opts={}){
+  if(e.isSubjectZero){e.hp=0;e.downed=true;e.downUntil=Date.now()+SUBJECT_ZERO.downMs;e.alerted=false;e.stunTime=e.downUntil;gs.mansion.statsDowns=(gs.mansion.statsDowns||0)+1;addLog('Sujeto Cero derribado temporalmente — sin XP ni BP.');return;}
   const p=gs.player;
   const sec=armorStats().secondary;
   const _as2=armorStats();
@@ -4672,10 +4686,10 @@ function spawnDmgNumber(x,y,val,isPlayer){
 
 function hasBuilding(buildingId){return Object.values(save.base||{}).some(b=>b&&b.buildingId===buildingId);}
 function hasPortalBuilding(){return hasBuilding('portal_estrafalario');}
-function unlockPortalBuildingRewards(){if(!save.portals)save.portals={unlocked:{},completed:{},tempXpBank:{portalId:null,floor:0,xp:0}};save.portals.unlocked.tristarm=true;save.portals.unlocked.umbra_mansion=true;save.portals.unlocked.steel_front=true;}
+function unlockPortalBuildingRewards(){if(!save.portals)save.portals={unlocked:{},completed:{},tempXpBank:{portalId:null,floor:0,xp:0}};save.portals.unlocked.tristarm=true;save.portals.unlocked.mansion_umbra=true;save.portals.unlocked.steel_front=true;}
 const OTHERWORLD_PORTALS=[
  {id:'tristarm',name:'Tristarm',desc:'Descenso por 16 pisos con Banco de XP temporal.',reward:'250.000 XP + banco completo al derrotar al jefe final',kind:'diablo'},
- {id:'umbra_mansion',name:'Mansión Umbra',desc:'Laberinto de llaves y supervivencia con Sujeto Cero.',reward:'Modificador de virus + Suero de cultivo',kind:'survival'},
+ {id:'mansion_umbra',name:'Mansión Umbra',desc:'Laberinto de llaves y supervivencia con Sujeto Cero.',reward:'Modificador de virus + Suero de cultivo',kind:'survival'},
  {id:'steel_front',name:'Frente de Acero',desc:'Avance lineal arcade, rescates y jefe gigante.',reward:'Vehículo único Slug + 15 Piezas de Slug',kind:'arcade'},
 ];
 
@@ -4686,21 +4700,66 @@ function renderVirusModifier(content){
 }
 function buyWalkerMutation(id){const lv=save.walkerMutations?.[id]||0;const cost=5*Math.pow(2,lv);if((save.resources.cultureSerum||0)<cost){alert('No alcanza el Suero de cultivo.');return;}if(!confirm(`Gastar ${cost} Suero de cultivo?`))return;save.resources.cultureSerum-=cost;save.walkerMutations[id]=lv+1;writeSave();renderVirusModifier(document.getElementById('workshop-content'));}
 
+
+async function mansionUmbraApi(action,extra={}){
+  if(!currentAuth)throw new Error('Sesión requerida.');
+  const data=await apiPost('/api/mansion-umbra/'+action,{user:currentAuth.user,password:currentAuth.password,...extra});
+  if(data.save)save=loadSave(data.save);updateMenuInfo();return data;
+}
+function seededRand(seed){let s=(seed>>>0)||1;return()=>((s=(s*1664525+1013904223)>>>0)/4294967296);}
+function buildMansionUmbraMap(seed){
+  const cols=48,rows=48,map=Array.from({length:rows},()=>Array(cols).fill(1));
+  const rooms=[
+    {id:'vestibulo',x:2,y:18,w:12,h:12,type:'Vestíbulo'}, {id:'dormitorio',x:17,y:3,w:12,h:6,type:'Dormitorio'},
+    {id:'oficina',x:32,y:4,w:12,h:12,type:'Oficina'}, {id:'medica',x:4,y:4,w:6,h:12,type:'Sala médica'},
+    {id:'almacen',x:18,y:18,w:12,h:12,type:'Almacén'}, {id:'seguridad',x:34,y:19,w:12,h:6,type:'Sala de seguridad'},
+    {id:'generadores',x:3,y:33,w:18,h:12,type:'Sala de generadores'}, {id:'archivo',x:24,y:34,w:12,h:12,type:'Archivo'},
+    {id:'laboratorio',x:31,y:30,w:12,h:18,type:'Laboratorio'}, {id:'salida',x:42,y:18,w:6,h:12,type:'Sala de salida'}];
+  const carve=(x,y,w,h)=>{for(let yy=y;yy<Math.min(rows-1,y+h);yy++)for(let xx=x;xx<Math.min(cols-1,x+w);xx++)map[yy][xx]=0;};
+  rooms.forEach(r=>carve(r.x,r.y,r.w,r.h));
+  const corridor=(x1,y1,x2,y2)=>{const hw=1;for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++)for(let o=-hw;o<=hw;o++)if(y1+o>0&&y1+o<rows-1)map[y1+o][x]=0;for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++)for(let o=-hw;o<=hw;o++)if(x2+o>0&&x2+o<cols-1)map[y][x2+o]=0;};
+  corridor(14,24,18,24);corridor(24,18,24,9);corridor(29,9,38,10);corridor(24,24,40,22);corridor(24,30,12,38);corridor(21,39,30,40);corridor(36,40,38,30);corridor(40,24,45,24);corridor(8,18,8,10);corridor(29,24,38,40); // alternatives
+  map[24][47]=0;map[25][47]=0;map._doorY=24;map._mansionRooms=rooms;return map;
+}
+function validateMansionUmbraMap(map){const rows=map.length,cols=map[0].length,start=[8,24],exit=[47,24],q=[start],seen=new Set([start.join(',')]);while(q.length){const [x,y]=q.shift();for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy,k=nx+','+ny;if(ny>=0&&ny<rows&&nx>=0&&nx<cols&&map[ny][nx]===0&&!seen.has(k)){seen.add(k);q.push([nx,ny]);}}}return rows>=42&&cols>=42&&seen.has(exit.join(','))&&seen.size>600;}
+async function startMansionUmbra(){
+  if(!hasPortalBuilding()){alert('Mansión Umbra bloqueada: construí el Portal estrafalario (10.000 bajas totales).');return;}
+  const seed=Math.floor(Math.random()*2147483647);const map=buildMansionUmbraMap(seed);if(!validateMansionUmbraMap(map)){alert('Mapa inválido; reintentá.');return;}
+  try{await mansionUmbraApi('start',{map_seed:seed});}catch(e){alert(e.message);return;}
+  activeMission={id:'mansion_umbra',name:'Mansión Umbra',icon:'🏚️',floors:1,mapPool:null,mapSize:{...MANSION_UMBRA_MAP_SIZE},enemyCount:10,
+    mtype:{id:'mansion_umbra',name:'Mansión Umbra',chestMul:0.25,enemyMul:0.25,enemyHpMul:5,enemyDmgMul:3,enemyXpMul:3},
+    scenario:{id:'mansion_umbra',icon:'🏚️',name:'Mansión Umbra',loot:{ammo:0.35,consumable:0.35,bp:0.5},palette:{floor:['#141115','#18131a','#100e12'],wall:['#24202a','#302835','#3b303f'],object:['#3a2a22','#2b211c','#6b5140'],accent:'#a88a70'}}};
+  startGame();
+}
+function setupMansionUmbraRun(){
+  gs.map=buildMansionUmbraMap(save.mansion_umbra?.map_seed||Date.now()); if(!validateMansionUmbraMap(gs.map))gs.map=buildMansionUmbraMap(1);
+  gs._scenario=activeMission.scenario;gs.mapObjects=[];gs.chests=[];gs.enemies=[];gs.mansion={keys:new Set(),openedDoors:new Set(),mechanisms:new Set(),serumFound:0,roomsVisited:new Set(),startTime:Date.now(),objective:'Encontrá la Llave oxidada',finished:false};
+  gs.exitDoor={tx:47,ty:24,x:47*TILE,y:23*TILE,open:false};
+  const keyRooms=[['rusty_key',6,8,'Llave oxidada'],['medical_key',21,21,'Llave médica'],['security_key',37,22,'Llave de seguridad'],['laboratory_key',35,36,'Llave del laboratorio']];
+  gs.mansionPickups=keyRooms.map(([id,tx,ty,name])=>({id,type:'key',name,x:tx*TILE+8,y:ty*TILE+8,taken:false}));
+  gs.mansionMechanisms=[['generator',8,38,'Generador eléctrico','medical_key'],['security_panel',39,22,'Panel de seguridad','security_key'],['decontamination',29,40,'Descontaminación','security_key'],['lab_terminal',36,37,'Terminal de laboratorio','laboratory_key'],['exit_switch',45,24,'Ascensor de escape','laboratory_key']].map(([id,tx,ty,name,req])=>({id,x:tx*TILE+4,y:ty*TILE+4,name,req,active:false}));
+  gs.mansionDoors=[['door_oxidada','rusty_key',14,24],['door_medica','medical_key',10,10],['door_seguridad','security_key',34,22],['door_laboratorio','laboratory_key',38,30]].map(([id,req,tx,ty])=>({id,req,tx,ty,open:false}));
+  gs.waveEnemyCount=10;for(let i=0;i<10;i++)spawnEnemy(Math.min(ENEMY_TYPES.length-1,Math.floor(Math.random()*5)),{minPlayerDist:220,noCannibal:true});spawnChests(4);spawnSubjectZero();codexDiscover('portals','mansion_umbra','played');codexDiscover('enemies','subject_zero','seen');
+}
+function spawnSubjectZero(){const pos=findFreePos(34,38,8);gs.subjectZero={x:pos.x,y:pos.y,size:34,hp:SUBJECT_ZERO.hp,maxHp:SUBJECT_ZERO.hp,dmg:SUBJECT_ZERO.dmg,speed:SUBJECT_ZERO.speed,downed:false,downUntil:0,attackCd:0,pathTimer:0,name:'Sujeto Cero',codexId:'subject_zero',color:'#101010',eyeColor:'#ffdddd',detect:Infinity,alerted:true,isSubjectZero:true,xp:0,bp:0};gs.enemies.push(gs.subjectZero);addLog('🔊 Pasos pesados resuenan: Sujeto Cero despertó.');}
+function syncMansionUmbra(){if(!isMansionUmbraActive()||!gs?.mansion)return;mansionUmbraApi('sync',{player_position:{x:gs.player.x,y:gs.player.y},keys:[...gs.mansion.keys],opened_doors:[...gs.mansion.openedDoors],activated_mechanisms:[...gs.mansion.mechanisms],serum_found:gs.mansion.serumFound}).catch(()=>{});}
+async function completeMansionUmbra(){if(gs.mansion.finished)return;gs.mansion.finished=true;try{const data=await mansionUmbraApi('victory',{escaped:true,keys:[...gs.mansion.keys],opened_doors:[...gs.mansion.openedDoors],activated_mechanisms:[...gs.mansion.mechanisms],serum_found:gs.mansion.serumFound});alert(`MANSIÓN UMBRA COMPLETADA\nSuero de la run: ${data.run_serum}\nRecompensa: ${data.clear_serum}\nTotal entregado: ${data.serum_delivered}`);}catch(e){alert(e.message);gs.mansion.finished=false;return;}showScreen('portals');}
+
 function renderPortalsScreen(){
   unlockPortalBuildingRewardsIfBuilt();
   document.getElementById('portal-kills-disp').textContent=save.totalEnemyKills||0;
-  document.getElementById('portal-serum-disp').textContent=save.resources?.cultureSerum||0;
+  document.getElementById('portal-serum-disp').textContent=save.resources?.mutagenicSerum||save.resources?.cultureSerum||0;
   document.getElementById('portal-slugparts-disp').textContent=save.resources?.slugParts||0;
   document.getElementById('portals-subtitle').textContent=hasPortalBuilding()?'Portales disponibles':'Bloqueado: construí el Portal estrafalario en la Base';
   const grid=document.getElementById('portals-grid');grid.innerHTML='';
-  OTHERWORLD_PORTALS.forEach(pt=>{const unlocked=hasPortalBuilding()&&!!save.portals.unlocked[pt.id];const completed=!!save.portals.completed[pt.id];grid.innerHTML+=`<div class="card ${unlocked?'owned':'locked'}"><div class="card-top"><span class="card-icon">${pt.id==='tristarm'?'🔥':pt.id==='umbra_mansion'?'🏚️':'🎖️'}</span><div><div class="card-title">${pt.name}</div><div class="card-sub">${unlocked?(completed?'COMPLETADO':'DESBLOQUEADO'):'BLOQUEADO'}</div></div></div><div class="card-desc">${pt.desc}</div><div class="card-stats"><div class="cs">Recompensa <span>${pt.reward}</span></div></div>${unlocked?`<button class="action-btn" onclick="openPortalDetail('${pt.id}')">ENTRAR</button>`:`<div class="owned-tag" style="color:#6f6658">Necesitás construir el Portal estrafalario</div>`}</div>`;});
+  OTHERWORLD_PORTALS.forEach(pt=>{const unlocked=hasPortalBuilding()&&!!save.portals.unlocked[pt.id];const completed=!!save.portals.completed[pt.id];grid.innerHTML+=`<div class="card ${unlocked?'owned':'locked'}"><div class="card-top"><span class="card-icon">${pt.id==='tristarm'?'🔥':pt.id==='mansion_umbra'?'🏚️':'🎖️'}</span><div><div class="card-title">${pt.name}</div><div class="card-sub">${unlocked?(completed?'COMPLETADO':'DESBLOQUEADO'):'BLOQUEADO'}</div></div></div><div class="card-desc">${pt.desc}</div><div class="card-stats"><div class="cs">Recompensa <span>${pt.reward}</span></div></div>${unlocked?`<button class="action-btn" onclick="openPortalDetail('${pt.id}')">ENTRAR</button>`:`<div class="owned-tag" style="color:#6f6658">Necesitás construir el Portal estrafalario</div>`}</div>`;});
   renderSlugUpgrades();
 }
 function unlockPortalBuildingRewardsIfBuilt(){if(hasPortalBuilding())unlockPortalBuildingRewards();}
-function openPortalDetail(id){const pt=OTHERWORLD_PORTALS.find(p=>p.id===id);if(!pt)return;const bank=save.portals.tempXpBank||{};document.getElementById('portal-detail').innerHTML=`<div class="card" style="border-color:rgba(192,160,96,0.35)"><div class="card-title">${pt.name}</div><div class="card-desc">${portalRulesHtml(pt)}</div>${pt.id==='tristarm'?`<button class="action-btn" onclick="startTristarm()">INICIAR TRISTARM</button>`:`<button class="action-btn" onclick="simulatePortalComplete('${id}')">SIMULAR COMPLETAR PORTAL</button>`}<button class="action-btn" onclick="renderPortalsScreen()">VOLVER A PORTALES</button></div>`;}
-function portalRulesHtml(pt){if(pt.id==='tristarm')return `Banco XP: ${(save.portals.tempXpBank&&save.portals.tempXpBank.xp)||0}. Mapas 72×48; enemigos base ×6 y escalado ×1,2; HP/daño ×1,1 por piso; límite simultáneo 30 con oleadas. Jefes propios: El Carnicero (piso 2) y El Diablo (piso 16). Al retirarte recibís 50%; al morir perdés el banco.`;if(pt.id==='umbra_mansion')return `Llaves exclusivas: oxidada, médica, seguridad y laboratorio. Sujeto Cero es inmortal, se derriba sin XP/BP y se regenera para perseguir de nuevo. Recursos limitados.`;return `Soldados con cascos que absorben/reducen el primer impacto, rescates con recompensas únicas por aparición y jefe gigante por fases. Artillería del Slug: tecla H con demora, área marcada, enfriamiento y mucho ruido.`;}
+function openPortalDetail(id){const pt=OTHERWORLD_PORTALS.find(p=>p.id===id);if(!pt)return;const bank=save.portals.tempXpBank||{};document.getElementById('portal-detail').innerHTML=`<div class="card" style="border-color:rgba(192,160,96,0.35)"><div class="card-title">${pt.name}</div><div class="card-desc">${portalRulesHtml(pt)}</div>${pt.id==='tristarm'?`<button class="action-btn" onclick="startTristarm()">INICIAR TRISTARM</button>`:pt.id==='mansion_umbra'?`<button class="action-btn" onclick="startMansionUmbra()">INICIAR MANSIÓN UMBRA</button>`:`<button class="action-btn" onclick="simulatePortalComplete('${id}')">SIMULAR COMPLETAR PORTAL</button>`}<button class="action-btn" onclick="renderPortalsScreen()">VOLVER A PORTALES</button></div>`;}
+function portalRulesHtml(pt){if(pt.id==='tristarm')return `Banco XP: ${(save.portals.tempXpBank&&save.portals.tempXpBank.xp)||0}. Mapas 72×48; enemigos base ×6 y escalado ×1,2; HP/daño ×1,1 por piso; límite simultáneo 30 con oleadas. Jefes propios: El Carnicero (piso 2) y El Diablo (piso 16). Al retirarte recibís 50%; al morir perdés el banco.`;if(pt.id==='mansion_umbra')return `Llaves exclusivas: oxidada, médica, seguridad y laboratorio. Sujeto Cero es inmortal, se derriba sin XP/BP y se regenera para perseguir de nuevo. Recursos limitados.`;return `Soldados con cascos que absorben/reducen el primer impacto, rescates con recompensas únicas por aparición y jefe gigante por fases. Artillería del Slug: tecla H con demora, área marcada, enfriamiento y mucho ruido.`;}
 function simulatePortalComplete(id){if(!hasPortalBuilding()){alert('Construí el Portal estrafalario primero.');return;}if(id==='tristarm'){const reward=250000;save.freeXP=(+save.freeXP||0)+reward;save.portals.tempXpBank={portalId:null,floor:0,xp:0};save.uniqueRewards.tristarmFirst=true;}
- if(id==='umbra_mansion'&&!save.uniqueRewards.umbraFirst){save.resources.cultureSerum=(+save.resources.cultureSerum||0)+25;save.uniqueRewards.umbraFirst=true;}
+ if(id==='mansion_umbra'&&!save.uniqueRewards.umbraFirst){save.resources.cultureSerum=(+save.resources.cultureSerum||0)+25;save.uniqueRewards.umbraFirst=true;}
  if(id==='steel_front'&&!save.uniqueRewards.steelFrontFirst){grantSlugReward();save.uniqueRewards.steelFrontFirst=true;}
  save.portals.completed[id]=true;codexDiscover('portals',id,'defeated');writeSave();renderPortalsScreen();addLog('Portal completado: '+id);}
 function grantSlugReward(){save.slug.owned=true;save.resources.slugParts=(+save.resources.slugParts||0)+15;if(!save.vehicles.some(v=>v.id==='slug'))save.vehicles.push({id:'slug',cargo:[]});}
@@ -5380,6 +5439,25 @@ function updateBossAbilities(now){
   }
 }
 
+
+function updateMansionUmbra(dt,now){
+  const p=gs.player,m=gs.mansion;if(!m)return;
+  const pcx=p.x+p.w/2,pcy=p.y+p.h/2;
+  for(const r of (gs.map._mansionRooms||[])){if(pcx>=r.x*TILE&&pcx<(r.x+r.w)*TILE&&pcy>=r.y*TILE&&pcy<(r.y+r.h)*TILE)m.roomsVisited.add(r.id);}
+  for(const k of gs.mansionPickups||[])if(!k.taken&&Math.hypot(pcx-k.x,pcy-k.y)<34){k.taken=true;m.keys.add(k.id);m.objective=k.id==='laboratory_key'?'Activá el ascensor de escape':'Buscá la próxima cerradura';m.serumFound+=k.id==='laboratory_key'?MANSION_UMBRA_SAMPLE_SERUM:0;addLog('🗝 '+k.name);playSfx('chest');syncMansionUmbra();}
+  for(const d of gs.mansionDoors||[])if(!d.open&&Math.hypot(pcx-(d.tx*TILE+16),pcy-(d.ty*TILE+16))<42){if(m.keys.has(d.req)){d.open=true;m.openedDoors.add(d.id);addLog('🚪 Puerta abierta con '+d.req);playSfx('door');syncMansionUmbra();}else addLog('🔒 Requiere '+d.req);}
+  for(const mech of gs.mansionMechanisms||[])if(!mech.active&&Math.hypot(pcx-mech.x,pcy-mech.y)<38){if(m.keys.has(mech.req)){mech.active=true;m.mechanisms.add(mech.id);m.serumFound+=MANSION_UMBRA_SAMPLE_SERUM;addLog('⚙ '+mech.name+' activado');syncMansionUmbra();}else addLog('⚙ '+mech.name+' requiere '+mech.req);}
+  if(m.mechanisms.has('exit_switch')){gs.exitDoor.open=true;m.objective='Escapá por la salida';}
+  const z=gs.subjectZero;if(z){
+    if(z.downed){z.alerted=false;z.stunTime=z.downUntil;if(now>=z.downUntil){z.downed=false;z.hp=z.maxHp;z.alerted=true;z.speed*=SUBJECT_ZERO.regenSpeedMul;addLog('⚠ Sujeto Cero se levantó.');}return;}
+    const zx=z.x+z.size/2,zy=z.y+z.size/2,dx=pcx-zx,dy=pcy-zy,dist=Math.hypot(dx,dy);
+    if(dist<260&&now%900<25){addLog(dist<110?'🚨 Sujeto Cero está encima.':'🔊 Pasos de Sujeto Cero cerca.');}
+    if(dist>1){const nx=z.x+(dx/dist)*z.speed,ny=z.y+(dy/dist)*z.speed;if(!isWall(nx+3,z.y+3,true)&&!isWall(nx+z.size-3,z.y+3,true))z.x=nx;if(!isWall(z.x+3,ny+3,true)&&!isWall(z.x+z.size-3,ny+z.size-3,true))z.y=ny;}
+    if(dist<(z.size+p.w)/2+5&&z.attackCd<now&&p.invTime<now){z.attackCd=now+1300;p.hp-=z.dmg;p.invTime=now+500;spawnDmgNumber(p.x+p.w/2,p.y,z.dmg,true);playSfx('hurt');if(p.hp<=0){gs.gameOver=true;mansionUmbraApi('abandon').catch(()=>{});}}
+  }
+  if(gs.exitDoor&&gs.exitDoor.open&&p.x+p.w>gs.exitDoor.x-8)completeMansionUmbra();
+}
+
 function update(dt){
   const p=gs.player,now=Date.now();
   let dx=0,dy=0;
@@ -5446,6 +5524,7 @@ function update(dt){
   // Auto-fire: hold Space for auto weapons
   if(gs.keys['Space']&&w.type==='range'&&(w.fireMode==='auto')) tryAttack();
   // MP regen removed — use consumibles
+  if(isMansionUmbraActive())updateMansionUmbra(dt,now);
   // Open chest proximity
   for(const c of gs.chests)if(!c.open&&Math.hypot(p.x+p.w/2-c.x-12,p.y+p.h/2-c.y-12)<36)openChest(c);
   // Door proximity — auto-open modal when player reaches the door
@@ -5594,6 +5673,16 @@ function update(dt){
 // ═══════════════════════════════════════════════════════════
 // DRAW
 // ═══════════════════════════════════════════════════════════
+
+function drawMansionUmbraObjects(){
+  const now=Date.now();ctx.save();ctx.font='20px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const d of gs.mansionDoors||[]){ctx.fillStyle=d.open?'#214021':'#3a2222';ctx.fillRect(d.tx*TILE,d.ty*TILE,TILE,TILE);ctx.fillText(d.open?'🚪':'🔒',d.tx*TILE+16,d.ty*TILE+16);}
+  for(const k of gs.mansionPickups||[])if(!k.taken){ctx.fillStyle=`rgba(210,180,90,${0.55+Math.sin(now*0.006)*0.2})`;ctx.beginPath();ctx.arc(k.x,k.y,12,0,Math.PI*2);ctx.fill();ctx.fillText('🗝',k.x,k.y);}
+  for(const m of gs.mansionMechanisms||[]){ctx.fillStyle=m.active?'#2d5a38':'#513c24';ctx.fillRect(m.x-10,m.y-10,24,24);ctx.fillText(m.active?'✅':'⚙',m.x+2,m.y+2);}
+  const z=gs.subjectZero;if(z){ctx.fillStyle=z.downed?'#3a3a3a':'#101010';ctx.fillRect(z.x,z.y,z.size,z.size);ctx.fillStyle='#ffdddd';ctx.fillText(z.downed?'⛓':'◉',z.x+z.size/2,z.y+z.size/2);ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(z.x,z.y-8,z.size,4);ctx.fillStyle='#8b0000';ctx.fillRect(z.x,z.y-8,z.size*Math.max(0,z.hp/z.maxHp),4);}
+  ctx.restore();
+}
+
 function draw(){
   if(!gs||!gs.map)return;
   const camX=Math.round(gs.camera.x),camY=Math.round(gs.camera.y);
@@ -5647,6 +5736,7 @@ function draw(){
   drawGolems();
   drawShadowMagic();
 
+  if(isMansionUmbraActive())drawMansionUmbraObjects();
   // Particles
   for(const pt of gs.particles){
     if(pt.type==='shockwave'){ctx.beginPath();ctx.arc(pt.x,pt.y,pt.r*(1.5-pt.life*0.5),0,Math.PI*2);ctx.strokeStyle=`${pt.color}${Math.floor(pt.life*180).toString(16).padStart(2,'0')}`;ctx.lineWidth=2;ctx.stroke();}
