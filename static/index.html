@@ -3446,9 +3446,7 @@ function generateChestLoot(){
   }
 
   if(cat==='weapon'){
-    const avail=WEAPON_CAT.filter(w=>!save.ownedWeapons.includes(w.id));
-    if(!avail.length) return generateChestLoot();
-    const w=avail[Math.floor(Math.random()*avail.length)];
+    const w=WEAPON_CAT[Math.floor(Math.random()*WEAPON_CAT.length)];
     return{type:'weapon',icon:w.icon,name:w.name,desc:`DMG:${w.dmg}`,data:{weaponId:w.id}};
   }
 
@@ -3471,7 +3469,7 @@ function generateChestLoot(){
 
   if(cat==='armor'){
     const armorEntries=ARMOR_CAT
-      .filter(a=>!a.free&&a.cost>0&&!isArmorOwned(a.id))
+      .filter(a=>!a.free&&a.cost>0)
       .map(a=>({weight:15000/a.cost,value:a}));
     if(!armorEntries.length) return generateChestLoot();
     const pick=weightedPick(armorEntries);
