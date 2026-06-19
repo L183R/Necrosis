@@ -1014,6 +1014,7 @@ const MISSION_TYPES=[
   {id:'super_malote',name:'Super Malote',icon:'💗', desc:'Enemigos con aura rosa: doble vida, doble ataque y XP ×3.',     color:'#ff4fb8', bc:'rgba(255,79,184,0.45)', chestMul:1.0,  enemyMul:1.25, enemyHpMul:2, enemyDmgMul:2, enemyXpMul:3, pinkAura:true},
   {id:'cuarentena', name:'Cuarentena', icon:'⏱️', desc:'La zona se vuelve tóxica si tardás demasiado.',          color:'#f9a825', bc:'rgba(249,168,37,0.4)',  chestMul:0.9,  enemyMul:1.25},
   {id:'apagon',     name:'Apagón',     icon:'🔦', desc:'Visibilidad reducida. XP y BP de enemigos ×2.', color:'#263238', bc:'rgba(96,125,139,0.45)', chestMul:1.05, enemyMul:1.15, enemyXpMul:2, enemyBpMul:2},
+  {id:'muerte_segura',name:'Muerte segura',icon:'🪦', desc:'Cada enemigo derrotado reaparece una vez con el doble de vida, XP y BP.', color:'#8e24aa', bc:'rgba(142,36,170,0.45)', chestMul:1.0, enemyMul:1.1, safeDeathRespawn:true},
   {id:'incursion',  name:'Incursión',  icon:'🗺️', desc:'Corrida más larga con recompensas acumuladas.',         color:'#6d4c41', bc:'rgba(109,76,65,0.4)',   chestMul:1.25, enemyMul:1.15},
 ];
 
@@ -3921,7 +3922,7 @@ function spawnWave(){
   gs._quarantineDeadline=mt==='cuarentena'?Date.now()+60000:0;
   gs._quarantineLastDmg=0;
   const _scName=gs._scenario?gs._scenario.icon+' '+gs._scenario.name:'';
-  const _special=mt==='defensa'?' — resistí 45s':mt==='purga'?' — destruí 3 portales':mt==='cuarentena'?' — cuarentena en 60s':mt==='apagon'?' — visibilidad reducida':mt==='incursion'?' — incursión extendida':'';
+  const _special=mt==='defensa'?' — resistí 45s':mt==='purga'?' — destruí 3 portales':mt==='cuarentena'?' — cuarentena en 60s':mt==='apagon'?' — visibilidad reducida':mt==='muerte_segura'?' — muerte segura activa':mt==='incursion'?' — incursión extendida':'';
   showBanner('wave-banner',`Piso ${gs.floor} — ${_scName} — ${gs.waveEnemyCount||'?'} enemigos${_special}`);
 }
 
@@ -4348,13 +4349,33 @@ function killEnemy(e,opts={}){
   playSfx('kill');
   spawnExplosion(e.x+e.size/2,e.y+e.size/2,18,e.color);
   addLog(noReward?`Sin recompensa — ${e.name}`:`+${xpGain} XP  +${bpGain} BP — ${e.name}`);
+  const safeDeathRespawn=!!(gs.mtype&&gs.mtype.safeDeathRespawn)&&!e.safeDeathRespawned&&!noReward;
   gs.enemies=gs.enemies.filter(x=>x!==e);
+  if(safeDeathRespawn)respawnSafeDeathEnemy(e);
   if(gs.mtype&&gs.mtype.id==='defensa'&&Date.now()<(gs._defenseUntil||0))spawnDefenseReplacement();
   if(e.splitOnDeath)spawnSplitWalkers(e);
   persistRunProgress();
   tryOpenClearedExit();
 }
 
+
+function respawnSafeDeathEnemy(e){
+  const pos=findSpawnPosFarFromPlayer(e.size||24,260);
+  const revived={...e,
+    x:pos.x,y:pos.y,
+    hp:Math.max(1,Math.round((e.maxHp||e.hp||1)*2)),
+    maxHp:Math.max(1,Math.round((e.maxHp||e.hp||1)*2)),
+    xp:Math.max(0,Math.round((e.xp||0)*2)),
+    bp:Math.max(0,Math.round((e.bp||0)*2)),
+    name:(e.name||'Enemigo')+' redivivo',
+    safeDeathRespawned:true,
+    detonating:false,detonateAt:0,stunTime:0,attackCd:0,
+    alerted:true,idleTimer:0,wobble:Math.random()*Math.PI*2,
+  };
+  gs.enemies.push(revived);
+  spawnExplosion(revived.x+revived.size/2,revived.y+revived.size/2,24,'#b65cff');
+  addLog(`🪦 ${revived.name}: vida, XP y BP ×2`);
+}
 
 function explodeKamikaze(e){
   if(!gs||!gs.enemies.includes(e))return;
