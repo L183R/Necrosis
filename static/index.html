@@ -4882,6 +4882,49 @@ function drawMissionVisibilityOverlay(){
   ctx.restore();
 }
 
+
+function nearestBlackoutEnemy(){
+  if(!isBlackoutMission()||!gs.player||!gs.enemies||gs.enemies.length===0)return null;
+  const px=gs.player.x+gs.player.w/2,py=gs.player.y+gs.player.h/2;
+  let best=null,bestDist=Infinity;
+  for(const e of gs.enemies){
+    if(!e||e.hp<=0||e.hiddenSplit)continue;
+    const ex=e.x+e.size/2,ey=e.y+e.size/2;
+    const dist=Math.hypot(ex-px,ey-py);
+    if(dist<bestDist){best=e;bestDist=dist;}
+  }
+  return best?{enemy:best,dist:bestDist}:null;
+}
+
+function drawBlackoutEnemyArrow(){
+  const target=nearestBlackoutEnemy();
+  if(!target)return;
+  const p=gs.player,e=target.enemy;
+  const px=p.x+p.w/2,py=p.y+p.h/2,ex=e.x+e.size/2,ey=e.y+e.size/2;
+  const angle=Math.atan2(ey-py,ex-px);
+  const sx=px-gs.camera.x,sy=py-gs.camera.y;
+  const radius=46;
+  const ax=clamp(sx+Math.cos(angle)*radius,22,W-22);
+  const ay=clamp(sy+Math.sin(angle)*radius,22,H-82);
+  const pulse=0.78+0.22*Math.sin(Date.now()*0.01);
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.translate(ax,ay);
+  ctx.rotate(angle);
+  ctx.globalAlpha=pulse;
+  ctx.shadowColor='#ffeb70';ctx.shadowBlur=14;
+  ctx.fillStyle='#ffeb70';
+  ctx.beginPath();
+  ctx.moveTo(16,0);ctx.lineTo(-10,-8);ctx.lineTo(-5,0);ctx.lineTo(-10,8);
+  ctx.closePath();ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.strokeStyle='rgba(30,20,0,0.85)';ctx.lineWidth=2;ctx.stroke();
+  ctx.rotate(-angle);
+  ctx.font='8px Courier New';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle='#fff3a6';
+  ctx.fillText(Math.round(target.dist/TILE)+'m',0,12);
+  ctx.restore();
+}
+
 function updateMissionHazards(dt){
   if(!gs||!gs.player)return;
   const now=Date.now();
@@ -5111,7 +5154,8 @@ function update(dt){
   if(!isWall(p.x+m,ny+m)&&!isWall(p.x+p.w-m,ny+m)&&!isWall(p.x+m,ny+p.h-m)&&!isWall(p.x+p.w-m,ny+p.h-m))p.y=ny;
   p.walking=Math.abs(dx)>0||Math.abs(dy)>0;
   p.walkPhase=(p.walkPhase||0)+(p.walking?dt*0.018*spd:0);
-  p.x=clamp(p.x,TILE,(mapW()-1)*TILE-p.w);p.y=clamp(p.y,TILE,(mapH()-1)*TILE-p.h);
+  const maxPlayerX=(gs.exitDoor&&gs.exitDoor.open)?mapW()*TILE-p.w:(mapW()-1)*TILE-p.w;
+  p.x=clamp(p.x,TILE,maxPlayerX);p.y=clamp(p.y,TILE,(mapH()-1)*TILE-p.h);
   p.facing=Math.atan2(gs.mouseY+gs.camera.y-p.y-p.h/2,gs.mouseX+gs.camera.x-p.x-p.w/2);
   // Smooth camera: lerp toward target, only move when delta > threshold
   const _camTargX=clamp(p.x+p.w/2-W/2,0,Math.max(0,mapW()*TILE-W));
@@ -5425,6 +5469,7 @@ function draw(){
   if(cw.type==='melee'){ctx.fillStyle='#c0c0c0';ctx.fillRect(10,-2,18,3);}
   else{ctx.fillStyle='#404040';ctx.fillRect(10,-3,16,6);ctx.fillStyle='#707070';ctx.fillRect(22,-2,7,4);}
   ctx.restore();ctx.restore();
+  if(blackoutActive)drawBlackoutEnemyArrow();
   // Rescue NPC — mismo sprite que el jugador, sin arma
   if(gs._rescueNpc&&gs._rescueNpc.alive){
     const n=gs._rescueNpc;
