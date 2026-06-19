@@ -892,7 +892,7 @@ const MISSION_TYPES=[
   {id:'horda',      name:'Horda',      icon:'🧟', desc:'Oleada masiva con pocos recursos.',                    color:'#c62828', bc:'rgba(198,40,40,0.4)',   chestMul:0.35, enemyMul:3.5},
   {id:'super_malote',name:'Super Malote',icon:'💗', desc:'Enemigos con aura rosa: doble vida, doble ataque y XP ×3.',     color:'#ff4fb8', bc:'rgba(255,79,184,0.45)', chestMul:1.0,  enemyMul:1.25, enemyHpMul:2, enemyDmgMul:2, enemyXpMul:3, pinkAura:true},
   {id:'cuarentena', name:'Cuarentena', icon:'⏱️', desc:'La zona se vuelve tóxica si tardás demasiado.',          color:'#f9a825', bc:'rgba(249,168,37,0.4)',  chestMul:0.9,  enemyMul:1.25},
-  {id:'apagon',     name:'Apagón',     icon:'🔦', desc:'Visibilidad reducida. Peleá dentro de tu cono de luz.', color:'#263238', bc:'rgba(96,125,139,0.45)', chestMul:1.05, enemyMul:1.15},
+  {id:'apagon',     name:'Apagón',     icon:'🔦', desc:'Visibilidad reducida. XP y BP de enemigos ×2.', color:'#263238', bc:'rgba(96,125,139,0.45)', chestMul:1.05, enemyMul:1.15, enemyXpMul:2, enemyBpMul:2},
   {id:'incursion',  name:'Incursión',  icon:'🗺️', desc:'Corrida más larga con recompensas acumuladas.',         color:'#6d4c41', bc:'rgba(109,76,65,0.4)',   chestMul:1.25, enemyMul:1.15},
 ];
 
@@ -3680,14 +3680,15 @@ function makeEnemy(t,pos,overrides={}){
   const spd=overrides.speed??Math.min(t.speed+gs.floor*0.03+gs.wave*0.01,ENEMY_MAX_SPD);
   const detect=overrides.detect??(t.detect??(t.screenDetect?Infinity:100+Math.random()*80));
   const mt=gs&&gs.mtype?gs.mtype:{};
-  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1;
+  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1,bpMul=mt.enemyBpMul||1;
   const finalHp=Math.round(hp*hpMul);
   const finalMaxHp=Math.round((overrides.maxHp??hp)*hpMul);
   const finalDmg=Math.round((overrides.dmg??(t.dmg+gs.floor*2))*dmgMul);
   const finalXp=Math.round((overrides.xp??t.xp)*xpMul);
+  const finalBp=Math.round((overrides.bp??t.bp)*bpMul);
   return {x:pos.x,y:pos.y,
     hp:finalHp,maxHp:finalMaxHp,
-    dmg:finalDmg,speed:spd,xp:finalXp,bp:overrides.bp??t.bp,
+    dmg:finalDmg,speed:spd,xp:finalXp,bp:finalBp,
     size:overrides.size??t.size,color:t.color,eyeColor:t.eyeColor,name:overrides.name??t.name,codexId:overrides.codexId??t.id??(overrides.name??t.name),
     ghost:t.ghost||false,screenDetect:t.screenDetect||false,packAura:t.packAura||0,splitOnDeath:overrides.splitOnDeath??(t.splitOnDeath||false),
     kamikaze:overrides.kamikaze??(t.kamikaze||false),fuseMs:overrides.fuseMs??t.fuseMs,explodeRadius:overrides.explodeRadius??t.explodeRadius,explosionDmg:overrides.explosionDmg??t.explosionDmg,detonating:false,detonateAt:0,
@@ -4255,13 +4256,13 @@ function spawnBoss(kind='golem',index=0,total=1){
   const pos=findFreePos(60,cx+Math.round(Math.cos(ring)*5),cy+Math.round(Math.sin(ring)*4));
   const bossHp=300+gs.floor*50;
   const mt=gs&&gs.mtype?gs.mtype:{};
-  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1;
+  const hpMul=mt.enemyHpMul||1,dmgMul=mt.enemyDmgMul||1,xpMul=mt.enemyXpMul||1,bpMul=mt.enemyBpMul||1;
   const finalBossHp=Math.round(bossHp*hpMul);
   gs.enemies.push({
     x:pos.x,y:pos.y,
     hp:finalBossHp,maxHp:finalBossHp,
     dmg:Math.round((35+gs.floor*5)*dmgMul),speed:0.9,
-    xp:Math.round(200*xpMul),bp:150,
+    xp:Math.round(200*xpMul),bp:Math.round(150*bpMul),
     size:kind==='golem'?72:kind==='splitter'?54:kind==='teleporter'?48:56,
     color:kind==='golem'?'#6b6258':kind==='summoner'?'#6a3a7a':kind==='splitter'?'#1f6f75':'#263c8f',
     eyeColor:kind==='golem'?'#ffd060':kind==='summoner'?'#ff70d0':kind==='splitter'?'#70ffee':'#80b8ff',
