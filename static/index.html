@@ -4120,7 +4120,9 @@ function tryAttack(){
     const meleeDmg=()=>Math.round(w.dmg*(0.85+Math.random()*0.3)*(1+p.stats.str*0.025)*violenceDamageMul()*(1+(_as.dmgPctBonus||0)/100));
     for(const e of gs.enemies){
       const ex=e.x+e.size/2,ey=e.y+e.size/2;
-      if(Math.hypot(ex-(p.x+p.w/2),ey-(p.y+p.h/2))<w.range&&Math.abs(normA(Math.atan2(ey-(p.y+p.h/2),ex-(p.x+p.w/2))-angle))<Math.PI/2.2)
+      const centerDist=Math.hypot(ex-(p.x+p.w/2),ey-(p.y+p.h/2));
+      const edgeReach=centerDist-(e.size||0)/2;
+      if(edgeReach<w.range&&Math.abs(normA(Math.atan2(ey-(p.y+p.h/2),ex-(p.x+p.w/2))-angle))<Math.PI/2.2)
         {damageEnemy(e,meleeDmg(),true,{weaponType:'melee'});}
     }
     for(const portal of (gs._purgePortals||[])){
