@@ -740,7 +740,12 @@ function ensureLocalMansionUmbraState(){
 function localMansionUmbraResult(action,extra={}){
   const m=ensureLocalMansionUmbraState();
   if(action==='start'){
-    if(m.active_run)throw new Error('Ya hay una run de Mansión Umbra activa.');
+    if(m.active_run){
+      const seed=Math.max(1,Math.round(+m.map_seed||+extra.map_seed||Math.random()*2147483647));
+      m.map_seed=seed;
+      writeSave();
+      return {ok:true,resumed:true,map_seed:seed,save};
+    }
     const seed=Math.max(1,Math.round(+extra.map_seed||Math.random()*2147483647));
     Object.assign(m,{unlocked:true,active_run:true,map_seed:seed,player_position:null,keys:[],opened_doors:[],activated_mechanisms:[],serum_found:0,last_result:null});
     save.codex.portals.mansion_umbra='played';save.codex.modes.mansion_umbra='played';
@@ -4785,7 +4790,9 @@ function validateMansionUmbraMap(map){const rows=map.length,cols=map[0].length,s
 async function startMansionUmbra(){
   if(!hasPortalBuilding()){alert('Mansión Umbra bloqueada: construí el Portal estrafalario (10.000 bajas totales).');return;}
   const seed=Math.floor(Math.random()*2147483647);const map=buildMansionUmbraMap(seed);if(!validateMansionUmbraMap(map)){alert('Mapa inválido; reintentá.');return;}
-  try{await mansionUmbraApi('start',{map_seed:seed});}catch(e){alert(e.message);return;}
+  let startData;
+  try{startData=await mansionUmbraApi('start',{map_seed:seed});}catch(e){alert(e.message);return;}
+  if(startData&&startData.resumed)addLog('🏚️ Continuando la run activa de Mansión Umbra.');
   activeMission={id:'mansion_umbra',name:'Mansión Umbra',icon:'🏚️',floors:1,mapPool:null,mapSize:{...MANSION_UMBRA_MAP_SIZE},enemyCount:10,
     mtype:{id:'mansion_umbra',name:'Mansión Umbra',chestMul:0.25,enemyMul:0.25,enemyHpMul:5,enemyDmgMul:3,enemyXpMul:3},
     scenario:{id:'mansion_umbra',icon:'🏚️',name:'Mansión Umbra',loot:{ammo:0.35,consumable:0.35,bp:0.5},palette:{floor:['#141115','#18131a','#100e12'],wall:['#24202a','#302835','#3b303f'],object:['#3a2a22','#2b211c','#6b5140'],accent:'#a88a70'}}};

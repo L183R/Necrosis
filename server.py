@@ -364,7 +364,9 @@ async def mansion_umbra_start(payload: MansionUmbraPayload):
     save = normalize_account_save(account.get("save") or {})
     mansion = _require_mansion_umbra_access(save)
     if mansion.get("active_run"):
-        raise HTTPException(status_code=409, detail="Ya hay una run de Mansión Umbra activa.")
+        seed = int(mansion.get("map_seed") or payload.map_seed or secrets.randbelow(2_147_483_647))
+        mansion["map_seed"] = seed
+        return {"ok": True, "resumed": True, "map_seed": seed, "save": _persist_user_save(user, save)}
     seed = int(payload.map_seed or secrets.randbelow(2_147_483_647))
     mansion.update({"active_run": True, "map_seed": seed, "player_position": None, "keys": [], "opened_doors": [], "activated_mechanisms": [], "serum_found": 0, "subject_zero_state": {"hp": 1800, "downed": False, "position": None, "regeneration_end": None}, "started_at": int(time.time()*1000), "last_result": None})
     save["codex"]["portals"]["mansion_umbra"] = "played"
