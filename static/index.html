@@ -948,6 +948,16 @@ const MELEE_PART_CAT={
 };
 function meleePartById(id){return MELEE_PART_CAT[id]||null;}
 function meleePartLabel(id){const p=meleePartById(id);return p?p.name:id;}
+function meleePartSlot(id){const p=meleePartById(id);return p?p.slot:null;}
+function meleePartOwner(id){return WEAPON_CAT.find(w=>w.type==='melee'&&w.defaultParts&&Object.values(w.defaultParts).includes(id))||null;}
+function meleePartExchangeCandidates(targetPartId){
+  const slot=meleePartSlot(targetPartId);
+  if(!slot)return[];
+  normalizeMeleePartStore();
+  return Object.entries(save.ownedMeleeParts)
+    .filter(([id,qty])=>id!==targetPartId&&qty>0&&meleePartSlot(id)===slot)
+    .map(([id,qty])=>({id,qty,weapon:meleePartOwner(id)}));
+}
 
 // Armaduras — incluye chaleco_comun (gratis, no se compra)
 const ARMOR_CAT=[
@@ -2612,6 +2622,7 @@ function renderForja(el){
   const inv=Object.entries(save.ownedMeleeParts).filter(([,qty])=>qty>0);
   let html=`<div style="font-size:20px;color:#c8bfa8;margin-bottom:10px">La Forja aumenta el drop de armas melee ×${Math.round(meleeWeaponDropMul()*100)/100}, permite desarmarlas y usa sus partes para modificarlas.</div>`;
   html+=`<div style="font-size:18px;color:#5a5248;margin-bottom:12px">Partes disponibles: ${inv.length?inv.map(([id,qty])=>`${meleePartLabel(id)} ×${qty}`).join(' · '):'ninguna'}</div>`;
+  html+=renderMeleePartExchange();
   if(!melee.length)html+='<div style="font-size:20px;color:#3a3028">No tenés armas melee para trabajar.</div>';
   for(const w of melee){
     const ew=effectiveMeleeWeapon(w);const mods=(save.meleeWeaponMods&&save.meleeWeaponMods[w.id])||{};
@@ -2628,6 +2639,45 @@ function renderForja(el){
   }
   el.innerHTML=html;
 }
+function renderMeleePartExchange(){
+  normalizeMeleePartStore();
+  const owned=Object.values(save.ownedMeleeParts).some(qty=>qty>0);
+  let html='<div class="sec-title" style="margin-top:12px">Intercambio de partes</div>';
+  html+='<div style="font-size:18px;color:#5a5248;margin-bottom:10px;line-height:1.45">Cambiá una parte desmontada por otra del mismo tipo para armar o mejorar otras armas. Cada opción muestra las estadísticas base del arma destino.</div>';
+  if(!owned)return html+'<div style="font-size:20px;color:#3a3028;margin-bottom:12px">Desarmá armas primero para conseguir partes intercambiables.</div>';
+  html+='<div class="two-col" style="margin-bottom:14px">';
+  for(const w of WEAPON_CAT.filter(w=>w.type==='melee'&&w.defaultParts)){
+    const ew=effectiveMeleeWeapon(w);
+    html+=`<div class="card"><div class="card-top"><span class="card-icon">${w.icon}</span><div><div class="card-title">${w.name}</div><div class="card-sub">Base: DMG ${w.dmg} · RNG ${w.range} · CAD ${w.speed}ms</div><div class="card-sub">Actual si la tenés: DMG ${ew.dmg} · RNG ${ew.range} · CAD ${ew.speed}ms</div></div></div>`;
+    html+='<div class="card-stats">';
+    for(const slot of MELEE_PART_SLOTS){
+      const targetPartId=w.defaultParts[slot];
+      const candidates=meleePartExchangeCandidates(targetPartId);
+      html+=`<div style="width:100%;margin-top:6px"><div class="cs">${MELEE_PART_SLOT_LABELS[slot]} <span>${meleePartLabel(targetPartId)} (${save.ownedMeleeParts[targetPartId]||0})</span></div>`;
+      if(candidates.length){
+        html+=candidates.map(c=>`<button class="action-btn" style="font-size:15px;margin-top:3px" onclick="exchangeMeleePart('${c.id}','${targetPartId}')">CAMBIAR ${meleePartLabel(c.id)} ×1 (${c.qty}) → ${meleePartLabel(targetPartId)}</button>`).join('');
+      }else{
+        html+='<div style="font-size:16px;color:#3a3028;margin-top:3px">Sin partes compatibles para intercambiar.</div>';
+      }
+      html+='</div>';
+    }
+    html+='</div></div>';
+  }
+  html+='</div>';
+  return html;
+}
+function exchangeMeleePart(fromPartId,toPartId){
+  normalizeMeleePartStore();
+  if(fromPartId===toPartId)return;
+  if(meleePartSlot(fromPartId)!==meleePartSlot(toPartId)){addLog('Solo podés intercambiar partes del mismo tipo.');return;}
+  if((save.ownedMeleeParts[fromPartId]||0)<=0){addLog('No tenés esa parte para intercambiar.');return;}
+  save.ownedMeleeParts[fromPartId]--;
+  if(save.ownedMeleeParts[fromPartId]<=0)delete save.ownedMeleeParts[fromPartId];
+  save.ownedMeleeParts[toPartId]=(+save.ownedMeleeParts[toPartId]||0)+1;
+  writeSave();renderForja(document.getElementById('workshop-content'));renderBase();
+  addLog(`⚙ ${meleePartLabel(fromPartId)} intercambiada por ${meleePartLabel(toPartId)}.`);
+}
+
 function upgradeMeleePart(weaponId,slot){
   const w=wById(weaponId);if(!w||w.type!=='melee'||!w.defaultParts||!w.defaultParts[slot])return;
   normalizeMeleePartStore();if(!save.meleeWeaponMods)save.meleeWeaponMods={};if(!save.meleeWeaponMods[weaponId])save.meleeWeaponMods[weaponId]={};
