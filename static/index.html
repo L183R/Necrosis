@@ -726,6 +726,56 @@ function localTristarmResult(action,extra={}){
   }
   throw new Error('Acción de Tristarm no disponible.');
 }
+
+function canUseLocalMansionUmbraFallback(err){return err&&err.status===404&&String(err.path||'').startsWith('/api/mansion-umbra/');}
+function ensureLocalMansionUmbraState(){
+  save.mansion_umbra=Object.assign({unlocked:false,completed:false,completion_count:0,active_run:false,map_seed:null,player_position:null,keys:[],opened_doors:[],activated_mechanisms:[],serum_found:0,first_clear_reward_claimed:false,last_result:null},save.mansion_umbra||{});
+  save.resources=Object.assign({},DEFAULT_SAVE.resources,save.resources||{});
+  save.portals=Object.assign({},DEFAULT_SAVE.portals,save.portals||{});
+  save.portals.completed=Object.assign({},DEFAULT_SAVE.portals.completed,save.portals.completed||{});
+  save.codex=Object.assign({},DEFAULT_SAVE.codex,save.codex||{});
+  ['enemies','modes','portals'].forEach(k=>{if(!save.codex[k]||typeof save.codex[k]!=='object')save.codex[k]={};});
+  return save.mansion_umbra;
+}
+function localMansionUmbraResult(action,extra={}){
+  const m=ensureLocalMansionUmbraState();
+  if(action==='start'){
+    if(m.active_run)throw new Error('Ya hay una run de Mansión Umbra activa.');
+    const seed=Math.max(1,Math.round(+extra.map_seed||Math.random()*2147483647));
+    Object.assign(m,{unlocked:true,active_run:true,map_seed:seed,player_position:null,keys:[],opened_doors:[],activated_mechanisms:[],serum_found:0,last_result:null});
+    save.codex.portals.mansion_umbra='played';save.codex.modes.mansion_umbra='played';
+    writeSave();
+    return {ok:true,map_seed:seed,save};
+  }
+  if(action==='sync'){
+    if(!m.active_run)throw new Error('No hay una run de Mansión Umbra activa.');
+    m.player_position=extra.player_position||m.player_position;
+    m.keys=Array.isArray(extra.keys)?[...new Set(extra.keys)]:m.keys;
+    m.opened_doors=Array.isArray(extra.opened_doors)?[...new Set(extra.opened_doors)]:m.opened_doors;
+    m.activated_mechanisms=Array.isArray(extra.activated_mechanisms)?[...new Set(extra.activated_mechanisms)]:m.activated_mechanisms;
+    m.serum_found=Math.max(+m.serum_found||0,Math.max(0,Math.round(+extra.serum_found||0)));
+    writeSave();
+    return {ok:true,save};
+  }
+  if(action==='abandon'){
+    Object.assign(m,{active_run:false,keys:[],opened_doors:[],activated_mechanisms:[],serum_found:0,last_result:{type:'abandon'}});
+    writeSave();
+    return {ok:true,save};
+  }
+  if(action==='victory'){
+    if(!m.active_run)throw new Error('No hay una run de Mansión Umbra activa.');
+    const first=!m.first_clear_reward_claimed;
+    const clearSerum=first?MANSION_UMBRA_FIRST_CLEAR_SERUM:MANSION_UMBRA_REPEAT_CLEAR_SERUM;
+    const runSerum=Math.max(+m.serum_found||0,Math.max(0,Math.round(+extra.serum_found||0)));
+    const total=clearSerum+runSerum;
+    save.resources.mutagenicSerum=Math.max(0,+save.resources.mutagenicSerum||0)+total;
+    Object.assign(m,{active_run:false,completed:true,completion_count:(+m.completion_count||0)+1,first_clear_reward_claimed:true,keys:[],opened_doors:[],activated_mechanisms:[],serum_found:0,last_result:{type:'victory',clear_serum:clearSerum,run_serum:runSerum,serum_delivered:total}});
+    save.portals.completed.mansion_umbra=true;save.codex.portals.mansion_umbra='defeated';save.codex.enemies.subject_zero='seen';
+    writeSave();
+    return {ok:true,serum_delivered:total,clear_serum:clearSerum,run_serum:runSerum,save};
+  }
+  throw new Error('Acción de Mansión Umbra no disponible.');
+}
 function writeSave(){
   if(!currentAuth)return;
   clearTimeout(saveTimer);
@@ -4703,8 +4753,18 @@ function buyWalkerMutation(id){const lv=save.walkerMutations?.[id]||0;const cost
 
 async function mansionUmbraApi(action,extra={}){
   if(!currentAuth)throw new Error('Sesión requerida.');
-  const data=await apiPost('/api/mansion-umbra/'+action,{user:currentAuth.user,password:currentAuth.password,...extra});
-  if(data.save)save=loadSave(data.save);updateMenuInfo();return data;
+  const payload={user:currentAuth.user,password:currentAuth.password,...extra};
+  let data;
+  try{
+    data=await apiPost('/api/mansion-umbra/'+action,payload);
+  }catch(e){
+    if(!canUseLocalMansionUmbraFallback(e))throw e;
+    addLog('Servidor sin API de Mansión Umbra; usando guardado local compatible.');
+    data=localMansionUmbraResult(action,extra);
+  }
+  if(data.save)save=loadSave(data.save);
+  updateMenuInfo();
+  return data;
 }
 function seededRand(seed){let s=(seed>>>0)||1;return()=>((s=(s*1664525+1013904223)>>>0)/4294967296);}
 function buildMansionUmbraMap(seed){
