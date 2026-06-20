@@ -4901,7 +4901,7 @@ async function startMansionUmbra(){
   activeMission={id:'mansion_umbra',name:'Mansión Umbra',icon:'🏚️',floors:1,mapPool:null,mapSize:{...MANSION_UMBRA_MAP_SIZE},enemyCount:10,
     mtype:{id:'mansion_umbra',name:'Mansión Umbra',chestMul:0.25,enemyMul:0.25,enemyHpMul:5,enemyDmgMul:3,enemyXpMul:3},
     scenario:{id:'mansion_umbra',icon:'🏚️',name:'Mansión Umbra',loot:{ammo:0.35,consumable:0.35,bp:0.5},palette:{floor:['#141115','#18131a','#100e12'],wall:['#24202a','#302835','#3b303f'],object:['#3a2a22','#2b211c','#6b5140'],accent:'#a88a70'}}};
-  startGame();
+  showScreen('game');
 }
 function setupMansionUmbraRun(){
   gs.map=buildMansionUmbraMap(save.mansion_umbra?.map_seed||Date.now()); if(!validateMansionUmbraMap(gs.map))gs.map=buildMansionUmbraMap(1);
