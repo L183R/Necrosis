@@ -364,6 +364,7 @@ canvas{display:block;position:fixed;inset:0}
       <div style="font-size:30px;letter-spacing:4px;color:#f39c12">MISIÓN COMPLETADA</div>
       <div id="victory-mission-name" style="font-size:20px;letter-spacing:3px;color:#5a5248;margin-top:4px"></div>
       <div id="victory-bp-gained" style="font-size:24px;color:#8adc8a;margin-top:8px;letter-spacing:2px"></div>
+      <div id="victory-vehicle-reward" style="display:none;margin-top:14px;padding:10px 12px;border:1px solid rgba(192,160,96,0.35);border-radius:4px;background:rgba(192,160,96,0.06);font-size:22px;color:#c8a060;letter-spacing:1px"></div>
     </div>
     <div style="font-size:18px;letter-spacing:3px;color:#5a5248;margin-bottom:8px">BOLSILLOS — SOLTÁ LO QUE NO QUERÉS GUARDAR</div>
     <div id="victory-pockets" style="display:flex;flex-direction:column;gap:5px;margin-bottom:18px"></div>
@@ -6108,15 +6109,35 @@ function showVictoryModal(){
       let picked=VEHICLE_CAT[0];
       for(const e of pool){rv-=e.w;if(rv<=0){picked=e.v;break;}}
       if(!save.vehicles)save.vehicles=[];
-      if(save.vehicles.length<maxVehicles()&&!save.vehicles.some(v=>v.id===picked.id)){
+      const alreadyOwned=save.vehicles.some(v=>v.id===picked.id);
+      const garageFull=save.vehicles.length>=maxVehicles();
+      const stored=!alreadyOwned&&!garageFull;
+      if(stored){
         save.vehicles.push({id:picked.id,cargo:[]});
         addLog(`${picked.icon} Vehículo encontrado: ${picked.name}!`);
+      } else if(alreadyOwned){
+        addLog(`${picked.icon} Vehículo encontrado: ${picked.name} (ya estaba en el garaje)`);
+      } else {
+        addLog(`${picked.icon} Vehículo encontrado: ${picked.name} (garaje lleno)`);
       }
+      snap.vehicleReward={...picked,stored,alreadyOwned,garageFull};
       writeSave();
     }
   }
   document.getElementById('victory-mission-name').textContent=(activeMission&&activeMission.id?activeMission.id.toUpperCase():'MISIÓN');
   document.getElementById('victory-bp-gained').textContent=`💰 ${snap.bp} BP  ·  ✨ ${snap.freeXP} XP libre  ·  Piso ${snap.floor}`;
+  const vehicleRewardEl=document.getElementById('victory-vehicle-reward');
+  if(vehicleRewardEl){
+    if(snap.vehicleReward){
+      const v=snap.vehicleReward;
+      const status=v.stored?'Guardado en el garaje':(v.alreadyOwned?'Ya estaba en tu garaje':'Garaje lleno: no se pudo guardar');
+      vehicleRewardEl.innerHTML=`<div style="font-size:18px;color:#5a5248;letter-spacing:3px;margin-bottom:4px">VEHÍCULO OBTENIDO</div><div>${v.icon} ${v.name}</div><div style="font-size:16px;color:#7a6e5e;margin-top:4px">${status}</div>`;
+      vehicleRewardEl.style.display='block';
+    } else {
+      vehicleRewardEl.style.display='none';
+      vehicleRewardEl.innerHTML='';
+    }
+  }
   renderVictoryPockets();
   document.getElementById('victory-modal').style.display='flex';
 }
