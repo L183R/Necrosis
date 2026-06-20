@@ -465,6 +465,8 @@ const DEFAULT_SAVE={
   vehicles: [],        // [{id, cargo:[]}] — owned vehicles
   equippedVehicle: null, // id of active vehicle
   weaponAttachments: {},
+  meleeWeaponMods: {},
+  ownedMeleeParts: {},
   ownedAttachments: {},
   armorMods: {},  // {armorUid: [{id,stat,value},...]}  — modifications installed by taller
   ownedArmorMods: {}, // {modId: count} — armor accessories found as loot, consumed in taller
@@ -492,6 +494,11 @@ function normalizeSave(raw){
   if(!Array.isArray(merged.stash))merged.stash=[];
   if(!Array.isArray(merged.vehicles))merged.vehicles=[];
   if(!Array.isArray(merged.loadout))merged.loadout=[];
+  if(!merged.meleeWeaponMods||typeof merged.meleeWeaponMods!=='object'||Array.isArray(merged.meleeWeaponMods))merged.meleeWeaponMods={};
+  if(!merged.ownedMeleeParts||typeof merged.ownedMeleeParts!=='object'||Array.isArray(merged.ownedMeleeParts))merged.ownedMeleeParts={};
+  merged.ownedWeapons=merged.ownedWeapons.filter(id=>id!=='sierra');
+  merged.loadout=merged.loadout.map(item=>item&&item.type==='weapon'&&item.id==='sierra'?null:item);
+  merged.stash=merged.stash.filter(item=>!(item&&item.type==='weapon'&&item.id==='sierra'));
   if(!merged.codex||typeof merged.codex!=='object')merged.codex={};
   merged.shopProgress=Object.assign({},DEFAULT_SAVE.shopProgress,(raw&&raw.shopProgress)||{});
   merged.portals=Object.assign({},DEFAULT_SAVE.portals,(raw&&raw.portals)||{});
@@ -874,12 +881,16 @@ function ammoCap(size){return AMMO_CAP[size]||24;}
 // fireMode: 'single'=1 bala/disparo  'burst'=3 balas/disparo  'auto'=continuo mientras Espacio
 const WEAPON_CAT=[
   // Melee
-  {id:'cuchillo',  name:'Cuchillo',        type:'melee',icon:'🔪',dmg:18,range:52, speed:280, cost:0},
-  {id:'hacha',     name:'Hacha',           type:'melee',icon:'🪓',dmg:30,range:58, speed:380, cost:120},
-  {id:'katana',    name:'Katana',          type:'melee',icon:'⚔️',dmg:44,range:66, speed:260, cost:350},
-  {id:'tanto',     name:'Tantō Ninja',     type:'melee',icon:'🗡️',dmg:34,range:58, speed:180, cost:420},
-  {id:'daga_saqueo',name:'Daga de Saqueo', type:'melee',icon:'🗡️',dmg:24,range:54, speed:170, cost:460},
-  {id:'sierra',    name:'Motosierra',      type:'melee',icon:'🔧',dmg:24,range:50, speed:190, cost:500},
+  {id:'cuchillo',  name:'Cuchillo',        type:'melee',icon:'🔪',dmg:18,range:52, speed:280, cost:0,  defaultParts:{cabeza:'cuchillo_hoja',filo:'cuchillo_filo',mango:'cuchillo_mango',guarda:'cuchillo_guarda',pomo:'cuchillo_pomo'}},
+  {id:'hacha',     name:'Hacha',           type:'melee',icon:'🪓',dmg:30,range:58, speed:380, cost:120,defaultParts:{cabeza:'hacha_cabeza',filo:'hacha_filo',mango:'hacha_mango',guarda:'hacha_guarda',pomo:'hacha_pomo'}},
+  {id:'katana',    name:'Katana',          type:'melee',icon:'⚔️',dmg:44,range:66, speed:260, cost:350,defaultParts:{cabeza:'katana_hoja',filo:'katana_filo',mango:'katana_mango',guarda:'katana_guarda',pomo:'katana_pomo'}},
+  {id:'tanto',     name:'Tantō Ninja',     type:'melee',icon:'🗡️',dmg:34,range:58, speed:180, cost:420,defaultParts:{cabeza:'tanto_hoja',filo:'tanto_filo',mango:'tanto_mango',guarda:'tanto_guarda',pomo:'tanto_pomo'}},
+  {id:'daga_saqueo',name:'Daga de Saqueo', type:'melee',icon:'🗡️',dmg:24,range:54, speed:170, cost:460,defaultParts:{cabeza:'daga_saqueo_hoja',filo:'daga_saqueo_filo',mango:'daga_saqueo_mango',guarda:'daga_saqueo_guarda',pomo:'daga_saqueo_pomo'}},
+  {id:'maza',      name:'Maza',            type:'melee',icon:'🔨',dmg:38,range:56, speed:430, cost:260,defaultParts:{cabeza:'maza_cabeza',filo:'maza_superficie',mango:'maza_mango',guarda:'maza_agarre',pomo:'maza_contrapeso'}},
+  {id:'lanza',     name:'Lanza',           type:'melee',icon:'🔱',dmg:28,range:88, speed:360, cost:320,defaultParts:{cabeza:'lanza_punta',filo:'lanza_filo',mango:'lanza_asta',guarda:'lanza_agarre',pomo:'lanza_tope'}},
+  {id:'martillo_guerra',name:'Martillo de Guerra',type:'melee',icon:'🔨',dmg:55,range:54,speed:620,cost:520,defaultParts:{cabeza:'martillo_cabeza',filo:'martillo_cara',mango:'martillo_mango',guarda:'martillo_agarre',pomo:'martillo_pomo'}},
+  {id:'espada_corta',name:'Espada Corta',  type:'melee',icon:'🗡️',dmg:27,range:57,speed:240,cost:220,defaultParts:{cabeza:'espada_corta_hoja',filo:'espada_corta_filo',mango:'espada_corta_mango',guarda:'espada_corta_guarda',pomo:'espada_corta_pomo'}},
+  {id:'guadana',   name:'Guadaña',         type:'melee',icon:'☠️',dmg:42,range:82, speed:480, cost:480,defaultParts:{cabeza:'guadana_hoja',filo:'guadana_filo',mango:'guadana_asta',guarda:'guadana_agarre',pomo:'guadana_contrapeso'}},
   // Range
   {id:'pistola',   name:'Pistola',         type:'range',icon:'🔫',dmg:26, range:280,speed:480, cost:0,
    caliber:'9mm',  magSize:12,reload:1800,soundRadius:320, fireMode:'single',
@@ -913,6 +924,30 @@ const WEAPON_CAT=[
    defaultAtts:{boca:'tobera_cohete_estandar',canon:'tubo_lanzador_estandar',mecanismo:'disparador_lanzador_estandar',cargador:'carga_individual_estandar',culata:'apoyo_lanzador_estandar',mira:'mira_lanzador_estandar'}},
 ];
 const wById=id=>WEAPON_CAT.find(w=>w.id===id);
+
+const MELEE_PART_SLOTS=['cabeza','filo','mango','guarda','pomo'];
+const MELEE_PART_SLOT_LABELS={cabeza:'Cabeza/hoja',filo:'Filo',mango:'Mango',guarda:'Guarda',pomo:'Pomo'};
+const MELEE_PART_UPGRADE={
+  cabeza:{label:'+5% daño',dmgMul:1.05},
+  filo:{label:'+3% daño',dmgMul:1.03},
+  mango:{label:'+4% alcance',rangeMul:1.04},
+  guarda:{label:'+2% cadencia',speedMul:1.02},
+  pomo:{label:'+2% cadencia',speedMul:1.02},
+};
+const MELEE_PART_CAT={
+  cuchillo_hoja:{name:'Hoja corta',slot:'cabeza'},cuchillo_filo:{name:'Filo simple',slot:'filo'},cuchillo_mango:{name:'Mango corto',slot:'mango'},cuchillo_guarda:{name:'Guarda mínima',slot:'guarda'},cuchillo_pomo:{name:'Pomo ligero',slot:'pomo'},
+  hacha_cabeza:{name:'Cabeza de hacha',slot:'cabeza'},hacha_filo:{name:'Filo de hacha',slot:'filo'},hacha_mango:{name:'Mango mediano',slot:'mango'},hacha_guarda:{name:'Agarre simple',slot:'guarda'},hacha_pomo:{name:'Contrapeso pesado',slot:'pomo'},
+  katana_hoja:{name:'Hoja de katana',slot:'cabeza'},katana_filo:{name:'Filo de katana',slot:'filo'},katana_mango:{name:'Tsuka',slot:'mango'},katana_guarda:{name:'Tsuba',slot:'guarda'},katana_pomo:{name:'Kashira',slot:'pomo'},
+  tanto_hoja:{name:'Hoja de tantō',slot:'cabeza'},tanto_filo:{name:'Filo preciso',slot:'filo'},tanto_mango:{name:'Mango corto ninja',slot:'mango'},tanto_guarda:{name:'Guarda mínima',slot:'guarda'},tanto_pomo:{name:'Pomo ultraligero',slot:'pomo'},
+  daga_saqueo_hoja:{name:'Hoja de daga',slot:'cabeza'},daga_saqueo_filo:{name:'Filo de saqueo',slot:'filo'},daga_saqueo_mango:{name:'Mango corto',slot:'mango'},daga_saqueo_guarda:{name:'Guarda ligera',slot:'guarda'},daga_saqueo_pomo:{name:'Pomo ligero',slot:'pomo'},
+  maza_cabeza:{name:'Cabeza contundente',slot:'cabeza'},maza_superficie:{name:'Superficie aplastante',slot:'filo'},maza_mango:{name:'Mango reforzado',slot:'mango'},maza_agarre:{name:'Agarre de cuero',slot:'guarda'},maza_contrapeso:{name:'Contrapeso pesado',slot:'pomo'},
+  lanza_punta:{name:'Punta de lanza',slot:'cabeza'},lanza_filo:{name:'Punta afilada',slot:'filo'},lanza_asta:{name:'Asta larga',slot:'mango'},lanza_agarre:{name:'Agarre central',slot:'guarda'},lanza_tope:{name:'Tope ligero',slot:'pomo'},
+  martillo_cabeza:{name:'Cabeza de martillo',slot:'cabeza'},martillo_cara:{name:'Cara endurecida',slot:'filo'},martillo_mango:{name:'Mango corto reforzado',slot:'mango'},martillo_agarre:{name:'Agarre firme',slot:'guarda'},martillo_pomo:{name:'Pomo pesado',slot:'pomo'},
+  espada_corta_hoja:{name:'Hoja corta recta',slot:'cabeza'},espada_corta_filo:{name:'Filo templado',slot:'filo'},espada_corta_mango:{name:'Mango simple',slot:'mango'},espada_corta_guarda:{name:'Guarda cruzada',slot:'guarda'},espada_corta_pomo:{name:'Pomo equilibrado',slot:'pomo'},
+  guadana_hoja:{name:'Hoja curva larga',slot:'cabeza'},guadana_filo:{name:'Filo curvo',slot:'filo'},guadana_asta:{name:'Asta larga',slot:'mango'},guadana_agarre:{name:'Agarre doble',slot:'guarda'},guadana_contrapeso:{name:'Contrapeso trasero',slot:'pomo'},
+};
+function meleePartById(id){return MELEE_PART_CAT[id]||null;}
+function meleePartLabel(id){const p=meleePartById(id);return p?p.name:id;}
 
 // Armaduras — incluye chaleco_comun (gratis, no se compra)
 const ARMOR_CAT=[
@@ -1515,7 +1550,8 @@ const attById=id=>ATTACHMENTS[id]||null;
 
 // Returns effective stats for a weapon with all its attachments applied
 function effectiveWeapon(w){
-  if(!w||w.type==='melee') return w;
+  if(!w)return w;
+  if(w.type==='melee') return effectiveMeleeWeapon(w);
   const slots=save.weaponAttachments[w.id]||{};
   let dmg=w.dmg, range=w.range, speed=w.speed, reload=w.reload,
       magSize=w.magSize, soundRadius=w.soundRadius||180, fireMode=w.fireMode||'single';
@@ -1532,6 +1568,19 @@ function effectiveWeapon(w){
     if(att.forceMode) fireMode=att.forceMode;
   }
   return{...w,dmg,range,speed,reload,magSize,soundRadius,fireMode,_modified:true};
+}
+function effectiveMeleeWeapon(w){
+  const mods=(save.meleeWeaponMods&&save.meleeWeaponMods[w.id])||{};
+  let dmg=w.dmg, range=w.range, speed=w.speed;
+  for(const slot of MELEE_PART_SLOTS){
+    const lv=Math.max(0,Math.round(+mods[slot]||0));
+    if(!lv)continue;
+    const up=MELEE_PART_UPGRADE[slot]||{};
+    if(up.dmgMul)dmg=Math.round(dmg*Math.pow(up.dmgMul,lv));
+    if(up.rangeMul)range=Math.round(range*Math.pow(up.rangeMul,lv));
+    if(up.speedMul)speed=Math.round(speed/Math.pow(up.speedMul,lv));
+  }
+  return {...w,dmg,range,speed,_modified:Object.values(mods).some(v=>v>0)};
 }
 
 
@@ -2524,8 +2573,8 @@ function openWorkshop(buildingId){
   const content=document.getElementById('workshop-content');
   if(!panel||!title||!content)return;
 
-  const icons={taller_armas:'⚒️',taller_armaduras:'\u{1F6E1}',taller_mecanico:'🔧'};
-  const names={taller_armas:'TALLER DE ARMAS',taller_armaduras:'TALLER DE ARMADURAS',taller_mecanico:'TALLER MECÁNICO'};
+  const icons={taller_armas:'⚒️',taller_armaduras:'\u{1F6E1}',taller_mecanico:'🔧',forja:'🔥'};
+  const names={taller_armas:'TALLER DE ARMAS',taller_armaduras:'TALLER DE ARMADURAS',taller_mecanico:'TALLER MECÁNICO',forja:'FORJA'};
   title.textContent=(icons[buildingId]||'') + ' ' + (names[buildingId]||buildingId);
   panel.style.display='block';
   panel.scrollIntoView({behavior:'smooth',block:'start'});
@@ -2533,6 +2582,7 @@ function openWorkshop(buildingId){
   if(buildingId==='taller_armas') renderWorkshopArmas(content);
   else if(buildingId==='taller_armaduras') renderWorkshopArmaduras(content);
   else if(buildingId==='taller_mecanico') renderWorkshopMecanico(content);
+  else if(buildingId==='forja') renderForja(content);
   else if(buildingId==='modificador_virus') renderVirusModifier(content);
 }
 
@@ -2548,6 +2598,58 @@ function renderWorkshopArmas(el){
   });
   writeSave();
   renderAttachments(el);
+}
+
+
+// ── Forja: melee weapon dismantling and upgrades ──────────────
+function forjaLevel(){return Object.values(save.base||{}).filter(b=>b&&b.buildingId==='forja').reduce((s,b)=>s+(b.level||0),0);}
+function meleeWeaponDropMul(){return Math.pow(1.12,forjaLevel());}
+function normalizeMeleePartStore(){if(!save.ownedMeleeParts)save.ownedMeleeParts={};}
+function meleePartUpgradeCost(slot,lv){return Math.round(120*Math.pow(1.55,lv||0));}
+function renderForja(el){
+  el.innerHTML='';normalizeMeleePartStore();
+  const melee=WEAPON_CAT.filter(w=>w.type==='melee'&&save.ownedWeapons.includes(w.id));
+  const inv=Object.entries(save.ownedMeleeParts).filter(([,qty])=>qty>0);
+  let html=`<div style="font-size:20px;color:#c8bfa8;margin-bottom:10px">La Forja aumenta el drop de armas melee ×${Math.round(meleeWeaponDropMul()*100)/100}, permite desarmarlas y usa sus partes para modificarlas.</div>`;
+  html+=`<div style="font-size:18px;color:#5a5248;margin-bottom:12px">Partes disponibles: ${inv.length?inv.map(([id,qty])=>`${meleePartLabel(id)} ×${qty}`).join(' · '):'ninguna'}</div>`;
+  if(!melee.length)html+='<div style="font-size:20px;color:#3a3028">No tenés armas melee para trabajar.</div>';
+  for(const w of melee){
+    const ew=effectiveMeleeWeapon(w);const mods=(save.meleeWeaponMods&&save.meleeWeaponMods[w.id])||{};
+    html+=`<div class="card" style="margin-bottom:12px"><div class="card-top"><span class="card-icon">${w.icon}</span><div><div class="card-title">${w.name}</div><div class="card-sub">DMG ${ew.dmg} · RNG ${ew.range} · CAD ${ew.speed}ms</div></div></div>`;
+    html+='<div class="card-stats" style="margin-bottom:8px">';
+    for(const slot of MELEE_PART_SLOTS){
+      const partId=w.defaultParts&&w.defaultParts[slot];const lv=mods[slot]||0;const cost=meleePartUpgradeCost(slot,lv);const qty=partId?(save.ownedMeleeParts[partId]||0):0;
+      html+=`<div class="cs">${MELEE_PART_SLOT_LABELS[slot]} <span>${meleePartLabel(partId)} Nv${lv}</span></div>`;
+      html+=`<button class="action-btn" style="font-size:16px" onclick="upgradeMeleePart('${w.id}','${slot}')" ${(qty>0&&save.bp>=cost)?'':' disabled'}>MEJORAR ${MELEE_PART_SLOT_LABELS[slot]} — ${cost} BP + 1 parte (${qty}) · ${MELEE_PART_UPGRADE[slot].label}</button>`;
+    }
+    html+='</div>';
+    html+=`<button class="action-btn" style="border-color:rgba(220,90,70,0.4);color:#e88" onclick="dismantleMeleeWeapon('${w.id}')" ${w.id==='cuchillo'?' disabled title="El cuchillo inicial no se desarma"':''}>DESARMAR — recuperar partes base</button>`;
+    html+='</div>';
+  }
+  el.innerHTML=html;
+}
+function upgradeMeleePart(weaponId,slot){
+  const w=wById(weaponId);if(!w||w.type!=='melee'||!w.defaultParts||!w.defaultParts[slot])return;
+  normalizeMeleePartStore();if(!save.meleeWeaponMods)save.meleeWeaponMods={};if(!save.meleeWeaponMods[weaponId])save.meleeWeaponMods[weaponId]={};
+  const partId=w.defaultParts[slot];const lv=save.meleeWeaponMods[weaponId][slot]||0;const cost=meleePartUpgradeCost(slot,lv);
+  if((save.ownedMeleeParts[partId]||0)<=0){addLog('Falta la parte: '+meleePartLabel(partId));return;}
+  if(save.bp<cost){addLog('BP insuficientes');return;}
+  save.bp-=cost;save.ownedMeleeParts[partId]--;save.meleeWeaponMods[weaponId][slot]=lv+1;
+  writeSave();renderForja(document.getElementById('workshop-content'));renderBase();
+}
+function dismantleMeleeWeapon(weaponId){
+  const w=wById(weaponId);if(!w||w.type!=='melee'||weaponId==='cuchillo')return;
+  if(!confirm(`¿Desarmar ${w.name}? Se quitará de tus armas y recibirás sus partes.`))return;
+  normalizeMeleePartStore();
+  Object.values(w.defaultParts||{}).forEach(pid=>{save.ownedMeleeParts[pid]=(+save.ownedMeleeParts[pid]||0)+1;});
+  save.ownedWeapons=(save.ownedWeapons||[]).filter(id=>id!==weaponId);
+  const removeWeapon=arr=>Array.isArray(arr)?arr.map(item=>item&&item.type==='weapon'&&item.id===weaponId?null:item):arr;
+  save.loadout=removeWeapon(save.loadout);
+  save.stash=(save.stash||[]).filter(item=>!(item&&item.type==='weapon'&&item.id===weaponId));
+  if(gs&&gs.player&&Array.isArray(gs.player.pockets)){gs.player.pockets=removeWeapon(gs.player.pockets);gs.player.weaponSlots=pocketWeapons(gs.player.pockets);}
+  delete (save.meleeWeaponMods||{})[weaponId];
+  writeSave();renderForja(document.getElementById('workshop-content'));renderBase();
+  addLog(`${w.icon} ${w.name} desarmada en la Forja.`);
 }
 
 // ── Taller de Armaduras: armor mod slots ────────────────────
@@ -3589,12 +3691,13 @@ function generateChestLoot(){
   const pocketCals=[...new Set(pocketWepIds.map(id=>wById(id)?.caliber).filter(Boolean))];
 
   const armorDropMul=armorWorkshopDropMul();
+  const meleeDropMul=meleeWeaponDropMul();
   const cat=weightedPick([
     {weight:1000,                    value:'none'},
     {weight:500*luckMul,             value:'bp'},
     {weight:300*luckMul,             value:'consumable'},
     {weight:200*luckMul,             value:'ammo'},
-    {weight:100*luckMul,             value:'weapon'},
+    {weight:100*luckMul*meleeDropMul, value:'weapon'},
     {weight:80 *luckMul,             value:'attachment'},
     {weight:50 *luckMul*armorDropMul,value:'armor'},
     {weight:50 *luckMul*armorDropMul,value:'armor_mod'},
@@ -3630,7 +3733,9 @@ function generateChestLoot(){
   }
 
   if(cat==='weapon'){
-    const w=WEAPON_CAT[Math.floor(Math.random()*WEAPON_CAT.length)];
+    const meleeMul=meleeWeaponDropMul();
+    const entries=WEAPON_CAT.map(w=>({weight:w.type==='melee'?meleeMul:1,value:w}));
+    const w=weightedPick(entries);
     return{type:'weapon',icon:w.icon,name:w.name,desc:`DMG:${w.dmg}`,data:{weaponId:w.id}};
   }
 
@@ -4865,6 +4970,14 @@ const BASE_BUILDINGS={
     cost:lv=>1000*lv,
     benefit:lv=>`Nivel ${lv} — drops de mods ×${Math.round(Math.pow(1.1,lv)*100)/100}`,
   },
+  forja:{
+    id:'forja',name:'Forja',icon:'🔥',
+    desc:'Aumenta el drop de armas melee y permite desarmarlas/modificarlas. Coste base: 1000 BP.',
+    shape:['xoxo','oooo','oooo','xoxo'],
+    maxLevel:10,
+    cost:lv=>1000*lv,
+    benefit:lv=>`Nivel ${lv} — drop armas melee ×${Math.round(Math.pow(1.12,lv)*100)/100}`,
+  },
   fabrica_zombibots:{
     id:'fabrica_zombibots',name:'Fábrica de Zombibots',icon:'🤖',
     desc:'(Efecto próximamente) Coste: 4000×1.25^Nv.',
@@ -5027,7 +5140,7 @@ function renderBase(){
         }
         return fx;
       })():''}
-      ${'taller_armas taller_armaduras taller_mecanico modificador_virus'.includes(slot.buildingId)
+      ${'taller_armas taller_armaduras taller_mecanico forja modificador_virus'.includes(slot.buildingId)
           ?`<button class="action-btn" style="margin-top:4px;border-color:rgba(192,160,96,0.4);color:#c8a060" onclick="openWorkshop('${slot.buildingId}')">⚙ ABRIR TALLER</button>`:''}
       `;
     }
